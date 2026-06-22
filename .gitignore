@@ -1,0 +1,11 @@
+# Scripts de build locaux (contiennent des chemins Windows locaux)
+parse_code.py
+make_icons.py
+# Fichiers réservés à l'usage local sur PC
+LISEZ-MOI.txt
+*.bat
+# Divers
+code_data.json
+__pycache__/
+*.pyc
+ebook_voiture_*.pdf
