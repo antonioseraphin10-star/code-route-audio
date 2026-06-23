@@ -4,6 +4,11 @@ make_icons.py
 # Fichiers réservés à l'usage local sur PC
 LISEZ-MOI.txt
 *.bat
+# Fichiers de travail (classement des images)
+_classify/
+audit_input.json
+gallery.html
+wf_*.json
 # Divers
 code_data.json
 __pycache__/

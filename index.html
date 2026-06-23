@@ -112,6 +112,9 @@
   .qbar{height:8px;background:rgba(255,255,255,.16);border-radius:99px;overflow:hidden;margin-bottom:16px}
   .qbar>i{display:block;height:100%;background:linear-gradient(90deg,#22d3ee,#3b82f6);width:0;transition:.3s}
   .qtext{font-size:19px;font-weight:700;line-height:1.4;margin:6px 0 6px}
+  .qvisual{display:flex;justify-content:center;margin:4px 0 16px}
+  .qvisual svg{width:100%;max-width:260px;height:auto;background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:10px}
+  @media(max-width:480px){.qvisual svg{max-width:230px}}
   .qtags{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
   .tag{font-size:11.5px;font-weight:700;color:var(--brand);background:#eef2ff;padding:4px 10px;border-radius:99px}
   .choices{display:flex;flex-direction:column;gap:11px}
@@ -244,6 +247,8 @@
 <input type="file" id="importFile" accept="application/json,.json" style="display:none">
 
 <script src="data.js"></script>
+<script src="visuals.js"></script>
+<script src="images.js"></script>
 <script>
 /* ============================ Utils ============================ */
 const $ = (s,r=document)=>r.querySelector(s);
@@ -552,6 +557,8 @@ const App = {
     letters.forEach(L=>{ch+=`<button class="choice" data-l="${L}" onclick="App.answer('${L}')">
         <span class="key">${L}</span><span class="ctxt">${esc(q.choices[L])}</span><span class="mark"></span></button>`;});
     const pct=Math.round(Q.i/Q.list.length*100);
+    const vis=(window.CODE_IMAGES&&window.CODE_VISUALS)?window.CODE_IMAGES[q.id]:null;
+    const visHtml=vis?`<div class="qvisual">${CODE_VISUALS.render(vis)}</div>`:"";
     app.innerHTML=`
       <div class="crumb"><a onclick="App.quitQuiz()">✕ Quitter</a> › <span>${esc(Q.meta.title)}</span></div>
       <div class="qhead">
@@ -564,6 +571,7 @@ const App = {
           <span class="tag">${esc(item.sid)} ${esc(item.stitle)}</span>
           <span class="tag" style="background:#f1f5f9;color:#475569;cursor:pointer" onclick="App.reread()">🔊 Réécouter</span>
         </div>
+        ${visHtml}
         <div class="qtext">${esc(q.text)}</div>
         <div class="choices">${ch}</div>
         <div class="feedback" id="fb"></div>
