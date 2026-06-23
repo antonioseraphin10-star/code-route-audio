@@ -115,6 +115,23 @@
   .qvisual{display:flex;justify-content:center;margin:4px 0 16px}
   .qvisual svg{width:100%;max-width:260px;height:auto;background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:10px}
   @media(max-width:480px){.qvisual svg{max-width:230px}}
+
+  /* ---------- ECF : 100 questions examinateur ---------- */
+  .ecf-banner{display:flex;align-items:center;gap:14px;cursor:pointer;border:2px solid transparent}
+  .ecf-banner:hover{border-color:var(--brand);transform:translateY(-2px)}
+  .ecf-banner .ecf-ic{font-size:28px;width:54px;height:54px;border-radius:14px;background:#eef2ff;display:grid;place-items:center;flex-shrink:0}
+  .ecf-banner b{font-size:16px;display:block;color:var(--ink)}
+  .ecf-banner span{color:var(--muted);font-size:12.5px}
+  .ecf-banner .ecf-go{margin-left:auto;font-size:24px;color:var(--brand);font-weight:800}
+  .ecf-block{padding:13px 0;border-bottom:1px solid var(--line)}
+  .ecf-block:last-of-type{border-bottom:none}
+  .ecf-label{font-size:11px;font-weight:800;color:var(--brand);background:#eef2ff;display:inline-block;padding:3px 10px;border-radius:99px;margin-bottom:8px}
+  .ecf-label.demo{color:#9333ea;background:#f5e8ff}
+  .ecf-q{font-size:16px;font-weight:700;line-height:1.35;margin-bottom:9px}
+  .ecf-ans{background:var(--green-bg);border:1px solid #86efac;border-radius:11px;padding:11px 13px;font-size:14.5px;color:#14532d;margin-top:8px}
+  .ecf-ans.demo-note{background:#f5e8ff;border-color:#e9d5ff;color:#6b21a8;font-style:italic}
+  .ecf-li{position:relative;padding-left:16px;margin:2px 0}
+  .ecf-li:before{content:'•';position:absolute;left:2px;color:var(--green);font-weight:800}
   .qtags{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
   .tag{font-size:11.5px;font-weight:700;color:var(--brand);background:#eef2ff;padding:4px 10px;border-radius:99px}
   .choices{display:flex;flex-direction:column;gap:11px}
@@ -249,6 +266,7 @@
 <script src="data.js"></script>
 <script src="visuals.js"></script>
 <script src="images.js"></script>
+<script src="ecf_data.js"></script>
 <script>
 /* ============================ Utils ============================ */
 const $ = (s,r=document)=>r.querySelector(s);
@@ -412,7 +430,7 @@ const App = {
     TTS.cancel();
     this.view=view; this.ctx=ctx;
     window.scrollTo(0,0);
-    ({home:this.renderHome,theme:this.renderTheme,course:this.renderCourse,quiz:this.renderQuiz,results:this.renderResults,stats:this.renderStats}[view]).call(this,ctx);
+    ({home:this.renderHome,theme:this.renderTheme,course:this.renderCourse,quiz:this.renderQuiz,results:this.renderResults,stats:this.renderStats,ecfList:this.renderEcfList,ecfCard:this.renderEcfCard}[view]).call(this,ctx);
   },
   subKey(tnum,sid){return "t"+tnum+"_"+sid;},
 
@@ -445,6 +463,11 @@ const App = {
           <span class="pill"><b>${DATA.themes.length}</b> thématiques</span>
           ${acc!=null?`<span class="pill click" onclick="App.go('stats')">🎯 <b>${acc}%</b> de réussite</span>`:`<span class="pill"><b>${totalSub}</b> leçons</span>`}
         </div>
+      </div>
+      <div class="panel ecf-banner" onclick="App.go('ecfList')">
+        <div class="ecf-ic">🧑‍⚖️</div>
+        <div style="min-width:0"><b>Les 100 questions de l'examinateur</b><span>Vérifications, sécurité &amp; premiers secours — l'oral du jour J</span></div>
+        <div class="ecf-go">→</div>
       </div>
       <div class="sec-title">📚 Choisis une thématique</div>
       <div class="grid">${cards}</div>
@@ -670,6 +693,72 @@ const App = {
   retryMissed(){const m=this.quiz.missed.slice();this.startQuiz(shuffle(m),{title:this.quiz.meta.title+" — rattrapage",key:null,themeNum:this.quiz.meta.themeNum,back:this.quiz.meta.back});},
   retryAll(){this.startQuiz(this.quiz.list.slice(),this.quiz.meta);},
 
+  /* ---------- ECF : 100 questions de l'examinateur ---------- */
+  ecf:{i:0,revealed:false},
+  renderEcfList(){
+    const app=$("#app"), D=window.ECF_DATA||[];
+    let rows="";
+    D.forEach((f,idx)=>{
+      const first=(f.pairs[0]&&f.pairs[0].q)||("Fiche "+f.n);
+      rows+=`<div class="subrow" onclick="App.openEcf(${idx})">
+        <div class="sid">${String(f.n).padStart(2,'0')}</div>
+        <div class="meta"><b>${esc(first)}</b><span>${f.pairs.length} points · vérification · sécurité / secours</span></div>
+        <div class="acts"><button class="btn btn-primary mini">Ouvrir</button></div>
+      </div>`;
+    });
+    app.innerHTML=`
+      <div class="crumb"><a onclick="App.go('home')">Accueil</a> › <span>100 questions de l'examinateur</span></div>
+      <div class="sec-title">🧑‍⚖️ Les 100 questions de l'examinateur</div>
+      <div class="panel" style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-green" style="flex:1;min-width:200px" onclick="App.openEcf(0)">▶️ Commencer (fiche 1)</button>
+        <button class="btn btn-ghost" style="flex:1;min-width:160px" onclick="App.openEcf(Math.floor(Math.random()*${D.length||1}))">🔀 Au hasard</button>
+      </div>
+      <div class="panel" style="padding:6px 16px">${rows||"<p>Données indisponibles.</p>"}</div>`;
+  },
+  openEcf(i){this.ecf={i:i,revealed:false};this.go("ecfCard");},
+  fmtAnswer(a){
+    return (a||"").split("\n").map(l=>{l=l.trim();if(!l)return"";
+      return l.indexOf("• ")===0?`<div class="ecf-li">${esc(l.slice(2))}</div>`:`<div>${esc(l)}</div>`;}).join("");
+  },
+  renderEcfCard(){
+    const app=$("#app"), D=window.ECF_DATA||[], i=this.ecf.i, f=D[i];
+    if(!f){this.go("ecfList");return;}
+    let blocks="";
+    f.pairs.forEach((p,bi)=>{
+      const demo=p.kind==="demo";
+      const label=demo?"👆 À montrer / faire dans le véhicule":"❓ Question";
+      const disp=this.ecf.revealed?"block":"none";
+      let ans="";
+      if(p.a) ans=`<div class="ecf-ans" id="ans${bi}" style="display:${disp}">${App.fmtAnswer(p.a)}</div>`;
+      else if(demo) ans=`<div class="ecf-ans demo-note" id="ans${bi}" style="display:${disp}">Geste à effectuer dans le véhicule (rien à dire à l'examinateur).</div>`;
+      blocks+=`<div class="ecf-block">
+        <div class="ecf-label ${demo?"demo":""}">${label}</div>
+        <div class="ecf-q">${esc(p.q)}</div>
+        ${(p.a||demo)?`<button class="btn btn-ghost mini" onclick="App.revealEcf(${bi})">👁️ Voir la réponse</button>`:""}
+        ${ans}
+      </div>`;
+    });
+    app.innerHTML=`
+      <div class="crumb"><a onclick="App.go('ecfList')">✕ Liste</a> › <span>Examinateur</span></div>
+      <div class="qhead"><span class="qcount">Fiche ${f.n} / ${D.length}</span>
+        <span class="tag" style="margin-left:auto;cursor:pointer" onclick="App.readEcf()">🔊 Réécouter</span></div>
+      <div class="qbar"><i style="width:${Math.round((i+1)/D.length*100)}%"></i></div>
+      <div class="panel">${blocks}
+        <button class="btn btn-ghost" style="width:100%;margin-top:12px" onclick="App.revealAllEcf()">👁️ Tout révéler</button>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" style="flex:1" ${i<=0?"disabled":""} onclick="App.ecfNav(-1)">← Préc.</button>
+        <button class="btn btn-primary" style="flex:1" ${i>=D.length-1?"disabled":""} onclick="App.ecfNav(1)">Suivant →</button>
+      </div>`;
+    if(Store.get("autoread",true)){
+      const chunks=[]; f.pairs.forEach(p=>{if(p.q)chunks.push(p.q);}); TTS.speakChunks(chunks);
+    }
+  },
+  revealEcf(bi){const e=$("#ans"+bi);if(e){e.style.display="block";const p=(window.ECF_DATA[this.ecf.i].pairs[bi]);if(p&&p.a){TTS.unlock();TTS.speak(p.a);}}},
+  revealAllEcf(){this.ecf.revealed=true;document.querySelectorAll(".ecf-ans").forEach(e=>e.style.display="block");},
+  readEcf(){TTS.unlock();const f=window.ECF_DATA[this.ecf.i];const c=[];f.pairs.forEach(p=>{if(p.q)c.push(p.q);if(p.a&&this.ecf.revealed)c.push(p.a);});TTS.speakChunks(c);},
+  ecfNav(d){const D=window.ECF_DATA||[];let n=this.ecf.i+d;if(n<0)n=0;if(n>=D.length)n=D.length-1;this.ecf={i:n,revealed:false};this.go("ecfCard");},
+
   /* ---------- STATS DASHBOARD ---------- */
   renderStats(){
     const app=$("#app"), st=Store.st;
@@ -836,6 +925,11 @@ document.addEventListener("keydown",e=>{
       if(L){App.answer(L);e.preventDefault();}
     }else if(k==="R"){App.reread();e.preventDefault();}
     else if((e.key==="Enter"||e.key===" "||e.key==="ArrowRight")&&Q.answered){App.next();e.preventDefault();}
+  }else if(App.view==="ecfCard"){
+    if(e.key==="ArrowRight"){App.ecfNav(1);e.preventDefault();}
+    else if(e.key==="ArrowLeft"){App.ecfNav(-1);e.preventDefault();}
+    else if(e.key===" "||e.key==="Enter"){App.revealAllEcf();e.preventDefault();}
+    else if(e.key.toUpperCase()==="R"){App.readEcf();e.preventDefault();}
   }
 });
 

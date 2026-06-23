@@ -1,12 +1,13 @@
 /* Service Worker — Code de la Route Révision Audio
    Stratégie : app-shell en cache (offline), réseau d'abord pour la navigation. */
-const CACHE = "cdlr-v3";
+const CACHE = "cdlr-v4";
 const ASSETS = [
   "./",
   "./index.html",
   "./data.js",
   "./visuals.js",
   "./images.js",
+  "./ecf_data.js",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png",
