@@ -124,6 +124,25 @@
     },
     no_vehicles(){
       return svg(120,120,`<circle cx="60" cy="60" r="56" fill="#fff"/><circle cx="60" cy="60" r="50" fill="none" stroke="${C.red}" stroke-width="13"/>`);
+    },
+    priority_road(){
+      return svg(120,120,`<rect x="30" y="30" width="60" height="60" transform="rotate(45 60 60)" fill="#fcd116" stroke="#fff" stroke-width="7"/>`);
+    },
+    end_priority(){
+      return svg(120,120,`<rect x="30" y="30" width="60" height="60" transform="rotate(45 60 60)" fill="#fcd116" stroke="#fff" stroke-width="7"/>`+
+        `<line x1="34" y1="86" x2="86" y2="34" stroke="#3b4250" stroke-width="6"/>`);
+    },
+    parking(){
+      return svg(120,120,`<rect x="14" y="14" width="92" height="92" rx="9" fill="${C.blue}"/>`+
+        `<text x="60" y="62" font-size="64" font-weight="900" font-family="Arial" text-anchor="middle" dominant-baseline="central" fill="#fff">P</text>`);
+    },
+    dead_end(){
+      return svg(120,120,`<rect x="14" y="14" width="92" height="92" rx="9" fill="${C.blue}"/>`+
+        `<rect x="55" y="48" width="10" height="48" fill="#fff"/><rect x="36" y="38" width="48" height="10" fill="${C.red}"/>`);
+    },
+    one_way(){
+      return svg(140,92,`<rect x="6" y="6" width="128" height="80" rx="9" fill="${C.blue}"/>`+
+        `<path d="M 28,46 L 102,46 M 102,46 L 84,31 M 102,46 L 84,61" stroke="#fff" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`);
     }
   };
   // petite voiture vue de dessus (pour panneaux dépassement)
@@ -157,7 +176,13 @@
     cyclists:`<circle cx="-12" cy="14" r="9" fill="none" stroke="${C.black}" stroke-width="4"/><circle cx="14" cy="14" r="9" fill="none" stroke="${C.black}" stroke-width="4"/><path d="M -12,14 L -2,-8 L 10,-8 M -2,-8 L 14,14 M -12,14 L 6,14" stroke="${C.black}" stroke-width="4" fill="none" stroke-linecap="round"/><circle cx="2" cy="-16" r="5" fill="${C.black}"/>`,
     narrowing:`<path d="M -16,24 L -6,-22 M 16,24 L 6,-22" stroke="${C.black}" stroke-width="7" fill="none" stroke-linecap="round"/>`,
     bumps:`<path d="M -22,18 Q -11,-10 0,18 Q 11,-10 22,18" fill="none" stroke="${C.black}" stroke-width="7" stroke-linecap="round"/>`,
-    priority_right_danger:`<path d="M 0,-22 L 0,22 M -22,0 L 22,0" stroke="${C.black}" stroke-width="7"/>`
+    priority_right_danger:`<path d="M 0,-22 L 0,22 M -22,0 L 22,0" stroke="${C.black}" stroke-width="7"/>`,
+    descent:`<path d="M -22,-12 L 22,14" stroke="${C.black}" stroke-width="7" stroke-linecap="round"/><path d="M 22,14 l -3,-13 l 13,5 z" fill="${C.black}"/>`,
+    ascent:`<path d="M -22,14 L 22,-12" stroke="${C.black}" stroke-width="7" stroke-linecap="round"/><path d="M 22,-12 l -13,-3 l 5,13 z" fill="${C.black}"/>`,
+    wind:`<path d="M -22,-8 q 16,-9 28,-1 t 16,3" fill="none" stroke="${C.black}" stroke-width="5" stroke-linecap="round"/><path d="M -22,8 q 16,-9 28,-1 t 16,3" fill="none" stroke="${C.black}" stroke-width="5" stroke-linecap="round"/>`,
+    two_way:`<path d="M -9,-22 L -9,22 M 9,-22 L 9,22 M -9,-22 L -15,-11 M -9,-22 L -3,-11 M 9,22 L 3,11 M 9,22 L 15,11" stroke="${C.black}" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+    tunnel:`<path d="M -20,22 L -20,-2 A 20,24 0 0 1 20,-2 L 20,22" fill="none" stroke="${C.black}" stroke-width="7" stroke-linejoin="round"/>`,
+    slope:`<path d="M -22,16 L 22,-14" stroke="${C.black}" stroke-width="7" stroke-linecap="round"/>`
   };
 
   /* ---------- PANNEAUX D'OBLIGATION (rond bleu) ---------- */
@@ -306,6 +331,82 @@
     return svg(W,H,`<rect width="${W}" height="${H}" fill="#0f172a" rx="14"/>`+beams+body+lamps);
   }
 
+  /* ---------- SCÈNES (vue de dessus) ---------- */
+  // voiture orientable
+  function scar(x, y, col, rot){
+    rot = rot || 0;
+    return `<g transform="translate(${x},${y}) rotate(${rot})">`+
+      `<rect x="-12" y="-19" width="24" height="38" rx="6" fill="${col}"/>`+
+      `<rect x="-8" y="-14" width="16" height="10" rx="2" fill="#e8eef5" opacity=".9"/>`+
+      `<rect x="-8" y="5" width="16" height="8" rx="2" fill="#1f2733" opacity=".35"/></g>`;
+  }
+  function dashAxis(x, H){let d="";for(let y=6;y<H;y+=28)d+=`<rect x="${x-2}" y="${y}" width="4" height="16" fill="${C.line}" opacity=".7"/>`;return d;}
+
+  // DISTANCE DE SÉCURITÉ entre deux véhicules
+  function distance(){
+    const W=160,H=210,cx=W/2;
+    let s=`<rect width="${W}" height="${H}" fill="${C.road}"/>`+dashAxis(cx,H);
+    s+=`<rect x="22" y="74" width="${W-44}" height="64" fill="#fde047" opacity=".22"/>`;
+    s+=scar(cx,48,C.grey,0)+scar(cx,168,C.blue,0);
+    s+=`<path d="M ${cx+40},76 L ${cx+40},136 M ${cx+40},76 L ${cx+34},84 M ${cx+40},76 L ${cx+46},84 M ${cx+40},136 L ${cx+34},128 M ${cx+40},136 L ${cx+46},128" stroke="#fde047" stroke-width="3" fill="none" stroke-linecap="round"/>`;
+    s+=`<text x="${cx}" y="${H-7}" fill="${C.line}" font-size="11" text-anchor="middle" font-family="Arial">vous</text>`;
+    return svg(W,H,s);
+  }
+
+  // DÉPASSEMENT
+  function overtaking(spec){
+    const W=170,H=210,cx=W/2;
+    const forbidden = spec && spec.id === 'forbidden';
+    let s=`<rect width="${W}" height="${H}" fill="${C.road}"/>`;
+    if(forbidden) s+=`<rect x="${cx-2}" y="0" width="4" height="${H}" fill="${C.line}"/>`;
+    else s+=dashAxis(cx,H);
+    s+=scar(cx+20,72,C.grey,0);
+    s+=`<path d="M ${cx+20},156 C ${cx-22},134 ${cx-22},94 ${cx+20},62" fill="none" stroke="#fde047" stroke-width="4" stroke-linecap="round"/>`;
+    s+=`<polygon points="${cx+20},52 ${cx+12},66 ${cx+28},66" fill="#fde047"/>`;
+    s+=scar(cx+20,162,C.blue,0);
+    if(forbidden) s+=`<text x="${cx}" y="22" fill="${C.red}" font-size="22" font-weight="900" text-anchor="middle" font-family="Arial">✕</text>`;
+    return svg(W,H,s);
+  }
+
+  // INSERTION / SORTIE AUTOROUTE
+  function motorway(spec){
+    const id = (spec && spec.id) || 'insertion';
+    const W=220,H=200;
+    let s=`<rect width="${W}" height="${H}" fill="${C.grass}"/>`;
+    s+=`<rect x="${W-92}" y="0" width="92" height="${H}" fill="${C.road}"/>`;
+    let d="";for(let y=6;y<H;y+=28)d+=`<rect x="${W-48}" y="${y}" width="4" height="16" fill="${C.line}" opacity=".7"/>`;
+    s+=d;
+    if(id==='exit'){
+      s+=`<path d="M ${W-92},96 Q ${W-150},120 ${W-176},${H} L ${W-132},${H} Q ${W-92},132 ${W-92},126 Z" fill="${C.road}"/>`;
+      s+=scar(W-150,158,C.blue,22);
+      s+=`<path d="M ${W-74},150 Q ${W-110},150 ${W-140},178" fill="none" stroke="#fde047" stroke-width="4" stroke-linecap="round"/>`;
+      s+=`<polygon points="${W-146},184 ${W-132},176 ${W-138},170" fill="#fde047"/>`;
+      s+=`<text x="${W-150}" y="20" font-size="11" fill="${C.ink}" text-anchor="middle" font-family="Arial">sortie</text>`;
+    }else{
+      s+=`<path d="M ${W-176},${H} Q ${W-150},120 ${W-92},96 L ${W-92},132 Q ${W-140},150 ${W-132},${H} Z" fill="${C.road}"/>`;
+      s+=scar(W-150,158,C.blue,-22);
+      s+=`<path d="M ${W-138},150 Q ${W-100},120 ${W-70},96" fill="none" stroke="#fde047" stroke-width="4" stroke-linecap="round"/>`;
+      s+=`<polygon points="${W-64},90 ${W-82},92 ${W-74},106" fill="#fde047"/>`;
+      s+=`<text x="${W-150}" y="20" font-size="11" fill="${C.ink}" text-anchor="middle" font-family="Arial">insertion</text>`;
+    }
+    return svg(W,H,s);
+  }
+
+  // ANGLES MORTS POIDS LOURD
+  function blindSpot(){
+    const W=200,H=212,cx=W/2,red="rgba(214,24,31,.34)";
+    let s=`<rect width="${W}" height="${H}" fill="#e9eef4"/>`;
+    s+=`<polygon points="${cx-26},44 ${cx+26},44 ${cx+44},14 ${cx-44},14" fill="${red}"/>`;
+    s+=`<rect x="${cx-60}" y="116" width="34" height="86" fill="${red}"/>`;
+    s+=`<rect x="${cx+26}" y="116" width="50" height="86" fill="${red}"/>`;
+    s+=`<rect x="${cx-26}" y="190" width="52" height="22" fill="${red}"/>`;
+    s+=`<rect x="${cx-26}" y="44" width="52" height="118" rx="5" fill="#37506e"/>`;
+    s+=`<rect x="${cx-26}" y="160" width="52" height="32" rx="6" fill="#243a55"/>`;
+    s+=`<rect x="${cx-20}" y="166" width="40" height="11" rx="2" fill="#9fb4cf"/>`;
+    s+=`<text x="${cx}" y="208" font-size="10" fill="${C.red}" font-weight="bold" text-anchor="middle" font-family="Arial">angles morts</text>`;
+    return svg(W,H,s);
+  }
+
   /* ---------- DISPATCH ---------- */
   function render(spec){
     if(!spec||!spec.type) return "";
@@ -321,6 +422,10 @@
         case "marking": return marking(spec.id);
         case "intersection": return intersection(spec);
         case "vehicle_lights": return vehicleLights(spec.id);
+        case "distance": return distance();
+        case "overtaking": return overtaking(spec);
+        case "motorway": return motorway(spec);
+        case "blind_spot": return blindSpot();
         default: return "";
       }
     }catch(e){return "";}
@@ -369,7 +474,22 @@
     {label:"Feux de route",spec:{type:"vehicle_lights",id:"main_beam"}},
     {label:"Feux de croisement",spec:{type:"vehicle_lights",id:"dipped"}},
     {label:"Feux de brouillard",spec:{type:"vehicle_lights",id:"fog"}},
-    {label:"Feux de détresse",spec:{type:"vehicle_lights",id:"hazard"}}
+    {label:"Feux de détresse",spec:{type:"vehicle_lights",id:"hazard"}},
+    {label:"Distance de sécurité",spec:{type:"distance"}},
+    {label:"Dépassement",spec:{type:"overtaking",id:"car"}},
+    {label:"Dépassement interdit",spec:{type:"overtaking",id:"forbidden"}},
+    {label:"Insertion autoroute",spec:{type:"motorway",id:"insertion"}},
+    {label:"Sortie autoroute",spec:{type:"motorway",id:"exit"}},
+    {label:"Angles morts camion",spec:{type:"blind_spot"}},
+    {label:"Route prioritaire",spec:{type:"sign",id:"priority_road"}},
+    {label:"Fin priorité",spec:{type:"sign",id:"end_priority"}},
+    {label:"Parking",spec:{type:"sign",id:"parking"}},
+    {label:"Impasse",spec:{type:"sign",id:"dead_end"}},
+    {label:"Sens unique",spec:{type:"sign",id:"one_way"}},
+    {label:"Danger pente",spec:{type:"danger",picto:"descent"}},
+    {label:"Danger vent",spec:{type:"danger",picto:"wind"}},
+    {label:"Danger tunnel",spec:{type:"danger",picto:"tunnel"}},
+    {label:"Circulation double sens",spec:{type:"danger",picto:"two_way"}}
   ];
 
   window.CODE_VISUALS = { render, catalog: CATALOG };
