@@ -366,6 +366,7 @@ const TTS = {
       const all=speechSynthesis.getVoices();
       this.voices=all.filter(v=>/^fr/i.test(v.lang));
       if(!this.voices.length) this.voices=all;
+      this.voices.sort((a,b)=>this.scoreVoice(b)-this.scoreVoice(a));
       this.pick(Store.get("voiceURI",null));
       App.fillVoices&&App.fillVoices();
     };
@@ -378,15 +379,61 @@ const TTS = {
     try{const u=new SpeechSynthesisUtterance(" ");u.volume=0;u.rate=2;speechSynthesis.speak(u);}catch(e){}
     if(!this.voices.length){setTimeout(()=>{this.voices=speechSynthesis.getVoices().filter(v=>/^fr/i.test(v.lang))||[];if(!this.voices.length)this.voices=speechSynthesis.getVoices();this.pick(Store.get("voiceURI",null));},150);}
   },
+  scoreVoice(v){
+    const s=((v.name||"")+" "+(v.voiceURI||"")).toLowerCase(), lang=(v.lang||"").toLowerCase();
+    let sc=0;
+    if(/fr[-_]fr/.test(lang)) sc+=50; else if(/^fr/.test(lang)) sc+=20;
+    if(/natural|neural|enhanced|premium|am[eé]lior|siri|wavenet|studio/.test(s)) sc+=40;
+    if(/audrey|aur[eé]lie|thomas|marie|denise|henri|julie|paul|hortense|guillaume|virginie|charlotte|am[eé]lie/.test(s)) sc+=8;
+    if(/compact|eloquence|reduced/.test(s)) sc-=20;
+    if(v.localService) sc+=6;
+    return sc;
+  },
   pick(uri){
     if(uri) this.voice=this.voices.find(v=>v.voiceURI===uri)||null;
-    if(!this.voice){
-      this.voice=this.voices.find(v=>/fr-FR/i.test(v.lang))
-               ||this.voices.find(v=>/^fr/i.test(v.lang))
-               ||this.voices[0]||null;
+    if(!this.voice && this.voices.length){
+      const self=this;
+      this.voice=this.voices.slice().sort((a,b)=>self.scoreVoice(b)-self.scoreVoice(a))[0]||null;
     }
   },
-  clean(t){return (t||"").replace(/\s*\*\s*/g," ").replace(/\s+/g," ").trim();},
+  LEX:[
+    /* Mots mal prononcés : ajoute des paires [/\bmot\b/gi, "écriture pour l'oreille"] ici. */
+  ],
+  normalizeSpeech(t){
+    let s=String(t||"");
+    s=s.replace(/ /g," ");                       // espace insécable
+    s=s.replace(/[•▪●∙]/g," ");   // puces de liste
+    s=s.replace(/\s*->\s*|→/g," soit ");         // flèche "->"
+    s=s.replace(/×/g," fois ");                  // ×
+    s=s.replace(/÷/g," divisé par ");            // ÷
+    s=s.replace(/~\s*(?=\d)/g,"environ ");            // ~100
+    s=s.replace(/\bkm\s*\/\s*h\b/gi," kilomètres heure ");
+    s=s.replace(/\bmg\s*\/\s*l\b/gi," milligrammes par litre ");
+    s=s.replace(/\bg\s*\/\s*l\b/gi," grammes par litre ");
+    s=s.replace(/(\d)\s*-\s*(?=\d)/g,"$1 à ");        // 30-50 -> 30 à 50
+    s=s.replace(/(\d)\s*km\b/gi,"$1 kilomètres");
+    s=s.replace(/\bkm\b/gi,"kilomètres");
+    s=s.replace(/(\d)\s*cm\b/gi,"$1 centimètres");
+    s=s.replace(/(\d)\s*mm\b/gi,"$1 millimètres");
+    s=s.replace(/(\d)\s*m²/gi,"$1 mètres carrés");
+    s=s.replace(/(\d)\s*m\b/g,"$1 mètres");
+    s=s.replace(/(\d)\s*kg\b/gi,"$1 kilogrammes");
+    s=s.replace(/(\d)\s*t\b/g,"$1 tonnes");
+    s=s.replace(/(\d)\s*h\s*(\d{2})\b/g,"$1 heures $2");
+    s=s.replace(/(\d)\s*h\b/g,"$1 heures");
+    s=s.replace(/(\d)\s*min\b/gi,"$1 minutes");
+    s=s.replace(/(\d)\s*g\b/g,"$1 grammes");
+    s=s.replace(/(\d)\s*%/g,"$1 pour cent");
+    s=s.replace(/%/g," pour cent ");
+    s=s.replace(/(\d)\s*°\s*c\b/gi,"$1 degrés");
+    s=s.replace(/(\d)\s*°/g,"$1 degrés");
+    s=s.replace(/\bn[°º]\s*/gi,"numéro ");
+    s=s.replace(/²/g," carré");
+    s=s.replace(/\betc\.?/gi,"et cetera");
+    for(let i=0;i<this.LEX.length;i++) s=s.replace(this.LEX[i][0],this.LEX[i][1]);
+    return s.replace(/\s+/g," ").replace(/\s+([,;.!?])/g,"$1").trim();
+  },
+  clean(t){return this.normalizeSpeech((t||"").replace(/\s*\*\s*/g," "));},
   cancel(){
     this.speaking=false;
     if(this._kick){clearInterval(this._kick);this._kick=null;}
@@ -897,11 +944,11 @@ const App = {
   fillVoices(){
     const sel=$("#selVoice"); if(!sel)return; sel.innerHTML="";
     if(!TTS.voices.length)sel.innerHTML="<option>Aucune voix détectée</option>";
-    TTS.voices.forEach(v=>{const o=el("option",null,v.name+" ("+v.lang+")");o.value=v.voiceURI;
+    TTS.voices.forEach((v,i)=>{const o=el("option",null,(i===0?"★ ":"")+v.name+" ("+v.lang+")");o.value=v.voiceURI;
       if(TTS.voice&&v.voiceURI===TTS.voice.voiceURI)o.selected=true;sel.appendChild(o);});
     const frCount=TTS.voices.filter(v=>/^fr/i.test(v.lang)).length;
-    $("#voiceHint").innerHTML=frCount?`🇫🇷 ${frCount} voix française(s) détectée(s).`:
-      "Aucune voix française détectée. Sur iPhone/iPad : Réglages › Accessibilité › Contenu énoncé › Voix › Français. Sur PC : paramètres de voix Windows.";
+    $("#voiceHint").innerHTML=(frCount?`🇫🇷 ${frCount} voix française(s) · ★ = recommandée.`:"Aucune voix française détectée.")+
+      `<br>📱 <b>iPhone/iPad</b> — pour une voix beaucoup plus naturelle : <b>Réglages › Accessibilité › Contenu énoncé › Voix › Français</b>, télécharge une voix « <b>Améliorée</b> » (ex. Audrey, Aurélie, Thomas), puis reviens ici la choisir.`;
   },
   bindSettings(){
     const r=$("#rngRate"),rv=$("#rateVal"),auto=$("#chkAuto"),sel=$("#selVoice");
