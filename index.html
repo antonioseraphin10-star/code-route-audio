@@ -6,6 +6,7 @@
 <title>Code de la Route — Révision Audio · Permis B</title>
 <meta name="description" content="Réviser le code de la route avec lecture vocale et suivi de progression.">
 <meta name="theme-color" content="#1e3a8a">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-32.png" sizes="32x32" type="image/png">
 <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
@@ -277,7 +278,7 @@
 <script>
 /* ============================ Utils ============================ */
 const $ = (s,r=document)=>r.querySelector(s);
-const el = (t,c,h)=>{const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e;};
+const el = (t,c,h)=>{const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.textContent=h; return e;};
 const esc = s => (s||"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
 const THEME_COLORS=["#2563eb","#0891b2","#7c3aed","#db2777","#16a34a","#ea580c","#0d9488","#dc2626","#9333ea","#475569"];
 const THEME_ICONS=["🧑‍✈️","🚸","🛣️","🚲","🌿","🅿️","🔧","⛑️","🛡️","📋"];
@@ -293,14 +294,67 @@ function addDays(ds,n){const p=ds.split("-").map(Number);const dt=new Date(p[0],
 function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("show"),2200);}
 
 /* ============================ Persistence ============================ */
+const emptyStats=()=>({version:2,totalAnswered:0,totalCorrect:0,themes:{},subs:{},questions:{},sessions:[],days:{}});
+const isObj=v=>v&&typeof v==="object"&&!Array.isArray(v);
+const safeJson=(raw,fallback={})=>{try{return raw?JSON.parse(raw):fallback;}catch(e){return fallback;}};
+const safeInt=(v,max=1000000)=>{const n=Number(v);return Number.isFinite(n)&&n>=0?Math.min(Math.floor(n),max):0;};
+const safeNum=(v,min,max,d)=>{const n=Number(v);return Number.isFinite(n)?clamp(n,min,max):d;};
+const safeStr=(v,max=180)=>typeof v==="string"?v.slice(0,max).replace(/[<>&"]/g,""):"";
+const safeTime=v=>{const n=Number(v);return Number.isFinite(n)&&n>0&&n<4102444800000?Math.floor(n):Date.now();};
+const safeDateKey=k=>/^\d{4}-\d{2}-\d{2}$/.test(k);
+const normalizeCounters=obj=>{
+  const out={};
+  if(!isObj(obj))return out;
+  Object.keys(obj).slice(0,1000).forEach(k=>{
+    const row=obj[k]; if(!isObj(row))return;
+    const a=safeInt(row.a), c=Math.min(safeInt(row.c),a);
+    if(a||c)out[safeStr(k,40)]={a,c};
+  });
+  return out;
+};
+function normalizeSettings(raw){
+  const src=isObj(raw)?raw:{}, out={};
+  if(typeof src.voiceURI==="string")out.voiceURI=safeStr(src.voiceURI,500);
+  if(src.rate!==undefined)out.rate=safeNum(src.rate,.5,2,1);
+  if(typeof src.autoread==="boolean")out.autoread=src.autoread;
+  return out;
+}
+function normalizeStats(raw){
+  const src=isObj(raw)?raw:{}, st=emptyStats();
+  st.totalAnswered=safeInt(src.totalAnswered);
+  st.totalCorrect=Math.min(safeInt(src.totalCorrect),st.totalAnswered);
+  st.themes=normalizeCounters(src.themes);
+  st.days={};
+  if(isObj(src.days))Object.keys(src.days).slice(0,730).forEach(k=>{
+    if(!safeDateKey(k))return;
+    const row=src.days[k]; if(!isObj(row))return;
+    const a=safeInt(row.a), c=Math.min(safeInt(row.c),a);
+    if(a||c)st.days[k]={a,c};
+  });
+  st.questions={};
+  if(isObj(src.questions))Object.keys(src.questions).slice(0,5000).forEach(k=>{
+    const row=src.questions[k]; if(!isObj(row))return;
+    const s=safeInt(row.s), c=Math.min(safeInt(row.c),s), l=safeTime(row.l);
+    if(s||c)st.questions[safeStr(k,40)]={s,c,l};
+  });
+  st.subs={};
+  if(isObj(src.subs))Object.keys(src.subs).slice(0,1000).forEach(k=>{
+    const row=src.subs[k]; if(!isObj(row))return;
+    st.subs[safeStr(k,80)]={best:safeNum(row.best,0,1,0),total:safeInt(row.total,500),when:safeTime(row.when)};
+  });
+  st.sessions=Array.isArray(src.sessions)?src.sessions.slice(-300).map(s=>{
+    const n=safeInt(isObj(s)?s.n:0,500), c=Math.min(safeInt(isObj(s)?s.c:0,500),n);
+    return {t:safeTime(isObj(s)?s.t:null),title:safeStr(isObj(s)?s.title:"",140),c,n,tnum:isObj(s)&&s.tnum!=null?safeInt(s.tnum,99):null};
+  }).filter(s=>s.n>0):[];
+  return st;
+}
 const Store = {
-  s:JSON.parse(localStorage.getItem("cdlr_settings")||"{}"),
+  s:normalizeSettings(safeJson(localStorage.getItem("cdlr_settings"),{})),
   st:null,
   init(){
-    this.st=JSON.parse(localStorage.getItem("cdlr_stats")||"{}");
-    const d={version:2,totalAnswered:0,totalCorrect:0,themes:{},subs:{},questions:{},sessions:[],days:{}};
-    for(const k in d) if(this.st[k]===undefined) this.st[k]=d[k];
+    this.st=normalizeStats(safeJson(localStorage.getItem("cdlr_stats"),{}));
     this.saveSt();
+    this.saveS();
   },
   saveS(){localStorage.setItem("cdlr_settings",JSON.stringify(this.s));},
   saveSt(){localStorage.setItem("cdlr_stats",JSON.stringify(this.st));},
@@ -340,14 +394,14 @@ const Store = {
     return {current,best};
   },
   reset(){
-    this.st={version:2,totalAnswered:0,totalCorrect:0,themes:{},subs:{},questions:{},sessions:[],days:{}};
+    this.st=emptyStats();
     this.saveSt();
   },
   exportData(){return JSON.stringify({app:"cdlr",version:2,exportedAt:new Date().toISOString(),settings:this.s,stats:this.st},null,1);},
   importData(obj){
-    if(!obj||obj.app!=="cdlr"||!obj.stats)throw new Error("Fichier non reconnu");
-    this.st=obj.stats; this.saveSt();
-    if(obj.settings){this.s=obj.settings; this.saveS();}
+    if(!obj||obj.app!=="cdlr"||!isObj(obj.stats))throw new Error("Fichier non reconnu");
+    this.st=normalizeStats(obj.stats); this.saveSt();
+    if(obj.settings){this.s=normalizeSettings(obj.settings); this.saveS();}
   }
 };
 
@@ -960,6 +1014,7 @@ const App = {
     $("#modalBg").onclick=e=>{if(e.target===$("#modalBg"))this.closeSettings();};
     $("#importFile").onchange=e=>{
       const f=e.target.files[0]; if(!f)return;
+      if(f.size>1024*1024){toast("Fichier trop volumineux");e.target.value="";return;}
       const rd=new FileReader();
       rd.onload=()=>{try{Store.importData(JSON.parse(rd.result));toast("Progression importée ✓");App.bindSettings&&0;App.go("stats");}catch(err){toast("Fichier invalide");}};
       rd.readAsText(f); e.target.value="";
