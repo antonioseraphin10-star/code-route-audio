@@ -102,6 +102,15 @@
   .course ul{margin:6px 0 6px 4px;list-style:none}
   .course li{position:relative;padding:5px 0 5px 22px;color:#1f2937}
   .course li:before{content:"›";position:absolute;left:4px;top:5px;color:var(--brand);font-weight:800}
+  .lesson-visuals{display:grid;gap:14px;margin-bottom:18px}
+  .lesson-diagram{overflow:hidden;border:1px solid var(--line);border-radius:18px;background:linear-gradient(145deg,#fff,#f8fbff);box-shadow:0 8px 24px rgba(15,23,42,.07)}
+  .lesson-diagram-head{padding:16px 18px 12px}
+  .lesson-diagram-kicker{display:block;margin-bottom:5px;color:var(--brand);font-size:11px;font-weight:900;letter-spacing:.08em}
+  .lesson-diagram h3{margin:0;color:#172033;font-size:17px;line-height:1.25}
+  .lesson-diagram p{margin:7px 0 0;color:#475569;font-size:13px;line-height:1.45}
+  .lesson-diagram-visual{padding:0 12px 12px}
+  .lesson-diagram svg{display:block;width:100%;height:auto;border-radius:14px}
+  @media(min-width:900px){.lesson-visuals{grid-template-columns:repeat(2,minmax(0,1fr))}.lesson-diagram:last-child{grid-column:1/-1}.lesson-diagram:last-child .lesson-diagram-visual{max-width:720px;margin:auto}}
   .reader{position:sticky;top:8px;z-index:5;display:flex;gap:8px;align-items:center;background:#0f172a;
     color:#fff;padding:10px 12px;border-radius:14px;margin-bottom:8px;box-shadow:var(--shadow)}
   .reader .rbtn{background:#fff;color:#0f172a;border:none;border-radius:10px;width:42px;height:42px;font-size:18px;cursor:pointer;touch-action:manipulation}
@@ -206,7 +215,7 @@
 
   .modal-bg{position:fixed;inset:0;background:rgba(2,6,23,.55);display:none;place-items:center;z-index:50;padding:16px}
   .modal-bg.show{display:grid}
-  .modal{background:#fff;border-radius:18px;max-width:440px;width:100%;padding:22px;box-shadow:var(--shadow)}
+  .modal{background:#fff;border-radius:18px;max-width:440px;width:100%;max-height:92vh;overflow:auto;padding:22px;box-shadow:var(--shadow)}
   .modal h3{font-size:18px;margin-bottom:14px}
   .field{margin-bottom:16px}
   .field label{font-weight:700;font-size:13.5px;display:block;margin-bottom:7px}
@@ -219,6 +228,10 @@
   .switch input:checked:before{left:21px}
   .rate-val{font-weight:800;color:var(--brand)}
   .hint{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--muted);margin-top:6px}
+  .voice-state{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+  .voice-chip{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:#eef2ff;color:#1d4ed8;font-size:11px;font-weight:800}
+  .voice-chip.local{background:#dcfce7;color:#166534}.voice-chip.remote{background:#fef3c7;color:#92400e}
+  .voice-chip.name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#f1f5f9;color:#475569}
   kbd{background:#0f172a;color:#fff;border-radius:6px;padding:1px 7px;font-size:11px;font-family:inherit}
   .credit{text-align:center;color:rgba(255,255,255,.55);font-size:12.5px;margin-top:30px;
     padding-top:16px;border-top:1px solid rgba(255,255,255,.12)}
@@ -240,19 +253,26 @@
     <button class="iconbtn" title="Réglages voix" onclick="App.openSettings()">⚙️</button>
   </header>
   <main id="app"></main>
-  <footer class="credit">🚦 Code Audio · Créé par <b>Séraphin Antonio</b></footer>
+  <footer class="credit">🚦 Code Audio · Créé par <b>Séraphin Antonio</b><br><span style="font-size:11px">Support pédagogique indépendant · ne remplace pas les textes officiels ni une formation agréée</span></footer>
 </div>
 
 <div class="modal-bg" id="modalBg">
   <div class="modal">
     <h3>⚙️ Réglages de la voix</h3>
     <div class="field">
-      <label>Voix de lecture</label>
+      <label>Mode et voix de lecture</label>
       <select id="selVoice"></select>
+      <div class="voice-state" id="voiceState"></div>
     </div>
     <div class="field">
-      <label>Vitesse de lecture · <span class="rate-val" id="rateVal">1.0×</span></label>
-      <input type="range" id="rngRate" min="0.6" max="1.4" step="0.05" value="1">
+      <label>Vitesse de lecture · <span class="rate-val" id="rateVal">0.94×</span></label>
+      <input type="range" id="rngRate" min="0.70" max="1.25" step="0.02" value="0.94">
+    </div>
+    <div class="field">
+      <label class="switch">
+        <input type="checkbox" id="chkNatural" checked>
+        <span>Rythme naturel et pauses entre question et réponses</span>
+      </label>
     </div>
     <div class="field">
       <label class="switch">
@@ -260,8 +280,9 @@
         <span>Lecture automatique des questions &amp; réponses</span>
       </label>
     </div>
-    <div class="field" style="margin-bottom:8px">
-      <button class="btn btn-ghost mini" onclick="TTS.test()">🔊 Tester la voix</button>
+    <div class="field" style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost mini" style="flex:1" onclick="TTS.test()">🔊 Tester le rendu</button>
+      <button class="btn btn-ghost mini" style="flex:1" onclick="App.useNaturalVoice()">✨ Réglage conseillé</button>
     </div>
     <div class="hint" id="voiceHint"></div>
     <button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="App.closeSettings()">Fermer</button>
@@ -275,6 +296,7 @@
 <script src="visuals.js"></script>
 <script src="images.js"></script>
 <script src="ecf_data.js"></script>
+<script src="tts.js"></script>
 <script>
 /* ============================ Utils ============================ */
 const $ = (s,r=document)=>r.querySelector(s);
@@ -315,7 +337,10 @@ const normalizeCounters=obj=>{
 function normalizeSettings(raw){
   const src=isObj(raw)?raw:{}, out={};
   if(typeof src.voiceURI==="string")out.voiceURI=safeStr(src.voiceURI,500);
-  if(src.rate!==undefined)out.rate=safeNum(src.rate,.5,2,1);
+  if(["natural","offline","manual"].includes(src.voiceMode))out.voiceMode=src.voiceMode;
+  if(src.rate!==undefined)out.rate=safeNum(src.rate,.5,2,.94);
+  if(typeof src.naturalPauses==="boolean")out.naturalPauses=src.naturalPauses;
+  if(src.speechVersion!==undefined)out.speechVersion=safeInt(src.speechVersion,20);
   if(typeof src.autoread==="boolean")out.autoread=src.autoread;
   return out;
 }
@@ -410,18 +435,29 @@ function splitSentences(t){
   const m=(t||"").match(/[^.!?]+[.!?]*\s*/g);
   return m?m.map(s=>s.trim()).filter(Boolean):((t&&t.trim())?[t.trim()]:[]);
 }
+const TTS_CORE=window.CODE_TTS_CORE;
 const TTS = {
-  voices:[], voice:null, rate:1, speaking:false, _kick:null, _unlocked:false,
-  supported:("speechSynthesis" in window),
+  voices:[],voice:null,rate:.94,mode:"natural",naturalPauses:true,speaking:false,
+  _pauseTimer:null,_voiceTimer:null,_runId:0,_unlocked:false,
+  supported:("speechSynthesis" in window)&&!!TTS_CORE,
   init(){
-    if(!this.supported) return;
-    this.rate=Store.get("rate",1);
+    if(!this.supported)return;
+    // Migration unique : l'ancien réglage 1.0 et la voix mémorisée pouvaient
+    // conserver une voix système robotisée malgré l'arrivée de voix naturelles.
+    if(Store.get("speechVersion",0)<2){
+      if(Math.abs(Store.get("rate",1)-1)<.001)Store.s.rate=.94;
+      Store.s.voiceMode="natural";
+      Store.s.naturalPauses=true;
+      Store.s.speechVersion=2;
+      Store.saveS();
+    }
+    this.rate=Store.get("rate",.94);
+    this.mode=Store.get("voiceMode","natural");
+    this.naturalPauses=Store.get("naturalPauses",true);
     const load=()=>{
       const all=speechSynthesis.getVoices();
-      this.voices=all.filter(v=>/^fr/i.test(v.lang));
-      if(!this.voices.length) this.voices=all;
-      this.voices.sort((a,b)=>this.scoreVoice(b)-this.scoreVoice(a));
-      this.pick(Store.get("voiceURI",null));
+      this.voices=TTS_CORE.sortVoices(all,"natural");
+      this.pick(Store.get("voiceURI",""),this.mode);
       App.fillVoices&&App.fillVoices();
     };
     load();
@@ -430,98 +466,107 @@ const TTS = {
   unlock(){
     if(this._unlocked||!this.supported)return;
     this._unlocked=true;
-    try{const u=new SpeechSynthesisUtterance(" ");u.volume=0;u.rate=2;speechSynthesis.speak(u);}catch(e){}
-    if(!this.voices.length){setTimeout(()=>{this.voices=speechSynthesis.getVoices().filter(v=>/^fr/i.test(v.lang))||[];if(!this.voices.length)this.voices=speechSynthesis.getVoices();this.pick(Store.get("voiceURI",null));},150);}
-  },
-  scoreVoice(v){
-    const s=((v.name||"")+" "+(v.voiceURI||"")).toLowerCase(), lang=(v.lang||"").toLowerCase();
-    let sc=0;
-    if(/fr[-_]fr/.test(lang)) sc+=50; else if(/^fr/.test(lang)) sc+=20;
-    if(/natural|neural|enhanced|premium|am[eé]lior|siri|wavenet|studio/.test(s)) sc+=40;
-    if(/audrey|aur[eé]lie|thomas|marie|denise|henri|julie|paul|hortense|guillaume|virginie|charlotte|am[eé]lie/.test(s)) sc+=8;
-    if(/compact|eloquence|reduced/.test(s)) sc-=20;
-    if(v.localService) sc+=6;
-    return sc;
-  },
-  pick(uri){
-    if(uri) this.voice=this.voices.find(v=>v.voiceURI===uri)||null;
-    if(!this.voice && this.voices.length){
-      const self=this;
-      this.voice=this.voices.slice().sort((a,b)=>self.scoreVoice(b)-self.scoreVoice(a))[0]||null;
+    try{const utterance=new SpeechSynthesisUtterance(" ");utterance.volume=0;utterance.rate=2;speechSynthesis.speak(utterance);}catch(e){}
+    if(!this.voices.length){
+      this._voiceTimer=setTimeout(()=>{
+        this.voices=TTS_CORE.sortVoices(speechSynthesis.getVoices(),"natural");
+        this.pick(Store.get("voiceURI",""),this.mode);
+        App.fillVoices&&App.fillVoices();
+        this._voiceTimer=null;
+      },180);
     }
   },
-  LEX:[
-    /* Mots mal prononcés : ajoute des paires [/\bmot\b/gi, "écriture pour l'oreille"] ici. */
-  ],
-  normalizeSpeech(t){
-    let s=String(t||"");
-    s=s.replace(/ /g," ");                       // espace insécable
-    s=s.replace(/[•▪●∙]/g," ");   // puces de liste
-    s=s.replace(/\s*->\s*|→/g," soit ");         // flèche "->"
-    s=s.replace(/×/g," fois ");                  // ×
-    s=s.replace(/÷/g," divisé par ");            // ÷
-    s=s.replace(/~\s*(?=\d)/g,"environ ");            // ~100
-    s=s.replace(/\bkm\s*\/\s*h\b/gi," kilomètres heure ");
-    s=s.replace(/\bmg\s*\/\s*l\b/gi," milligrammes par litre ");
-    s=s.replace(/\bg\s*\/\s*l\b/gi," grammes par litre ");
-    s=s.replace(/(\d)\s*-\s*(?=\d)/g,"$1 à ");        // 30-50 -> 30 à 50
-    s=s.replace(/(\d)\s*km\b/gi,"$1 kilomètres");
-    s=s.replace(/\bkm\b/gi,"kilomètres");
-    s=s.replace(/(\d)\s*cm\b/gi,"$1 centimètres");
-    s=s.replace(/(\d)\s*mm\b/gi,"$1 millimètres");
-    s=s.replace(/(\d)\s*m²/gi,"$1 mètres carrés");
-    s=s.replace(/(\d)\s*m\b/g,"$1 mètres");
-    s=s.replace(/(\d)\s*kg\b/gi,"$1 kilogrammes");
-    s=s.replace(/(\d)\s*t\b/g,"$1 tonnes");
-    s=s.replace(/(\d)\s*h\s*(\d{2})\b/g,"$1 heures $2");
-    s=s.replace(/(\d)\s*h\b/g,"$1 heures");
-    s=s.replace(/(\d)\s*min\b/gi,"$1 minutes");
-    s=s.replace(/(\d)\s*g\b/g,"$1 grammes");
-    s=s.replace(/(\d)\s*%/g,"$1 pour cent");
-    s=s.replace(/%/g," pour cent ");
-    s=s.replace(/(\d)\s*°\s*c\b/gi,"$1 degrés");
-    s=s.replace(/(\d)\s*°/g,"$1 degrés");
-    s=s.replace(/\bn[°º]\s*/gi,"numéro ");
-    s=s.replace(/²/g," carré");
-    s=s.replace(/\betc\.?/gi,"et cetera");
-    for(let i=0;i<this.LEX.length;i++) s=s.replace(this.LEX[i][0],this.LEX[i][1]);
-    return s.replace(/\s+/g," ").replace(/\s+([,;.!?])/g,"$1").trim();
+  scoreVoice(voice,mode){return TTS_CORE.scoreVoice(voice,mode||this.mode);},
+  pick(uri,mode){
+    this.mode=["natural","offline","manual"].includes(mode)?mode:"natural";
+    this.voice=TTS_CORE.selectVoice(this.voices,{mode:this.mode,voiceURI:uri||""});
+    return this.voice;
   },
-  clean(t){return this.normalizeSpeech((t||"").replace(/\s*\*\s*/g," "));},
+  clean(text){return TTS_CORE.normalizeSpeech(String(text||"").replace(/\s*\*\s*/g," "));},
   cancel(){
+    this._runId++;
     this.speaking=false;
-    if(this._kick){clearInterval(this._kick);this._kick=null;}
+    if(this._pauseTimer){clearTimeout(this._pauseTimer);this._pauseTimer=null;}
     if(this.supported){try{speechSynthesis.cancel();}catch(e){}}
   },
   speakChunks(chunks,opts){
     opts=opts||{};
     this.cancel();
     if(!this.supported){opts.onend&&opts.onend();return;}
-    chunks=(chunks||[]).map(c=>this.clean(c)).filter(Boolean);
-    if(!chunks.length){opts.onend&&opts.onend();return;}
+    if(!this.voice){
+      this.voices=TTS_CORE.sortVoices(speechSynthesis.getVoices(),"natural");
+      this.pick(Store.get("voiceURI",""),this.mode);
+    }
+    if(!this.voice){
+      toast("Aucune voix française compatible. Ouvre les réglages de la voix.");
+      opts.onend&&opts.onend();return;
+    }
+    const items=(chunks||[]).flatMap(chunk=>{
+      const source=typeof chunk==="string"?{text:chunk}:chunk||{};
+      const parts=TTS_CORE.segmentSpeech(this.clean(source.text),240);
+      return parts.map((text,index)=>({
+        text,
+        rateFactor:safeNum(source.rateFactor,.75,1.25,1),
+        pauseAfter:index===parts.length-1?safeNum(source.pauseAfter,0,1200,120):70
+      }));
+    });
+    if(!items.length){opts.onend&&opts.onend();return;}
     this.speaking=true;
-    let idx=0; const total=chunks.length, self=this;
+    const runId=this._runId;
+    let idx=0;
+    const total=items.length,self=this;
+    const finish=()=>{
+      if(runId!==self._runId)return;
+      self.speaking=false;
+      self._pauseTimer=null;
+      opts.onend&&opts.onend();
+    };
     const next=()=>{
-      if(!self.speaking)return;
-      if(idx>=total){self.speaking=false;if(self._kick){clearInterval(self._kick);self._kick=null;}opts.onend&&opts.onend();return;}
-      const u=new SpeechSynthesisUtterance(chunks[idx]);
-      if(self.voice)u.voice=self.voice;
-      u.lang=(self.voice&&self.voice.lang)||"fr-FR";
-      u.rate=self.rate; u.pitch=1;
-      u.onend=()=>{idx++; opts.onprogress&&opts.onprogress(idx,total); next();};
-      u.onerror=()=>{idx++; next();};
-      try{speechSynthesis.speak(u);}catch(e){idx++;next();}
+      if(runId!==self._runId||!self.speaking)return;
+      if(idx>=total){finish();return;}
+      const item=items[idx],utterance=new SpeechSynthesisUtterance(item.text);
+      if(self.voice)utterance.voice=self.voice;
+      utterance.lang=(self.voice&&self.voice.lang)||"fr-FR";
+      utterance.rate=clamp(self.rate*item.rateFactor,.5,2);
+      utterance.pitch=1;
+      const advance=()=>{
+        if(runId!==self._runId)return;
+        idx++;
+        opts.onprogress&&opts.onprogress(idx,total);
+        const wait=self.naturalPauses?item.pauseAfter:0;
+        if(wait){self._pauseTimer=setTimeout(next,wait);}else next();
+      };
+      utterance.onend=advance;
+      utterance.onerror=event=>{
+        if(runId!==self._runId)return;
+        if(!item.retried&&self.mode==="natural"&&self.voice&&!self.voice.localService&&/network|voice-unavailable|synthesis-failed/.test(event.error||"")){
+          const local=TTS_CORE.selectVoice(self.voices,{mode:"offline"});
+          if(local){
+            item.retried=true;self.voice=local;App.updateVoiceInfo&&App.updateVoiceInfo();
+            toast("Voix distante indisponible : passage à une voix locale.");
+            next();return;
+          }
+        }
+        advance();
+      };
+      try{speechSynthesis.speak(utterance);}catch(e){advance();}
     };
     const start=()=>{
+      if(runId!==self._runId)return;
       try{speechSynthesis.resume();}catch(e){}
-      if(!IS_IOS) this._kick=setInterval(()=>{try{if(speechSynthesis.speaking){speechSynthesis.pause();speechSynthesis.resume();}}catch(e){}},9000);
       next();
     };
-    if(IS_IOS) setTimeout(start,90); else start();
+    if(IS_IOS)this._pauseTimer=setTimeout(start,90);else start();
   },
-  speak(text,opts){this.speakChunks([text],opts);},
+  speak(text,opts){this.speakChunks([{text,pauseAfter:0}],opts);},
   pauseToggle(){if(!this.supported)return;if(speechSynthesis.paused)speechSynthesis.resume();else if(speechSynthesis.speaking)speechSynthesis.pause();},
-  test(){this._unlocked=true;this.speak("Bonjour ! Voici la voix qui lira vos questions du code de la route. Bonne révision !");}
+  test(){
+    this._unlocked=true;
+    this.speakChunks(TTS_CORE.quizSequence({
+      text:"À l’approche de cette zone, la vitesse est limitée à 50 km/h. Que faites-vous ?",
+      choices:{A:"Je ralentis progressivement.",B:"J’accélère jusqu’au panneau."}
+    },["A","B"]));
+  }
 };
 
 /* ============================ App ============================ */
@@ -644,6 +689,15 @@ const App = {
       else if(b[i].t==="h"){html+=`<h3>${esc(b[i].s)}</h3>`;i++;}
       else{html+=`<p>${esc(b[i].s)}</p>`;i++;}
     }
+    const guides=(window.CODE_VISUALS&&typeof CODE_VISUALS.lesson==="function")?CODE_VISUALS.lesson(s.id):[];
+    const guideHtml=guides.map(guide=>`<article class="lesson-diagram">
+      <div class="lesson-diagram-head">
+        <span class="lesson-diagram-kicker">${esc(guide.kicker)}</span>
+        <h3>${esc(guide.title)}</h3>
+        <p>${esc(guide.caption)}</p>
+      </div>
+      <div class="lesson-diagram-visual">${guide.svg}</div>
+    </article>`).join("");
     app.innerHTML=`
       <div class="crumb"><a onclick="App.go('home')">Accueil</a> › <a onclick="App.go('theme',{ti:${ti}})">${esc(t.title)}</a> › <span>Cours ${esc(s.id)}</span></div>
       <div class="sec-title" style="font-size:18px">📖 ${esc(s.id)} — ${esc(s.title)}</div>
@@ -653,9 +707,11 @@ const App = {
         <div class="rinfo" id="rInfo">Écouter la leçon</div>
         <div class="rbar"><i id="rBar"></i></div>
       </div>
+      ${guideHtml?`<div class="lesson-visuals">${guideHtml}</div>`:""}
       <div class="panel course">${html||"<p>Pas de contenu de cours pour cette leçon.</p>"}</div>
       <button class="btn btn-primary btn-lg" onclick="App.startSubQuiz(${ti},${si})">🎯 Passer au quiz de cette leçon</button>`;
     const chunks=[];
+    guides.forEach(guide=>splitSentences(`${guide.title}. ${guide.caption}`).forEach(p=>chunks.push(p)));
     s.course.forEach(blk=>splitSentences(blk.s).forEach(p=>chunks.push(p)));
     let playing=false;
     const info=$("#rInfo"),bar=$("#rBar"),play=$("#rPlay");
@@ -716,15 +772,12 @@ const App = {
   },
   autoRead(q,letters){
     if(!Store.get("autoread",true))return;
-    const chunks=["Question. "+q.text];
-    letters.forEach(L=>chunks.push("Réponse "+L+". "+q.choices[L]));
-    TTS.speakChunks(chunks);
+    TTS.speakChunks(TTS_CORE.quizSequence(q,letters));
   },
   reread(){
     TTS.unlock();
     const Q=this.quiz,q=Q.list[Q.i].q,letters=Object.keys(q.choices).sort();
-    const chunks=["Question. "+q.text];letters.forEach(L=>chunks.push("Réponse "+L+". "+q.choices[L]));
-    TTS.speakChunks(chunks);
+    TTS.speakChunks(TTS_CORE.quizSequence(q,letters));
   },
   answer(L){
     const Q=this.quiz; if(Q.answered)return; Q.answered=true;
@@ -997,20 +1050,67 @@ const App = {
   closeSettings(){$("#modalBg").classList.remove("show");},
   fillVoices(){
     const sel=$("#selVoice"); if(!sel)return; sel.innerHTML="";
-    if(!TTS.voices.length)sel.innerHTML="<option>Aucune voix détectée</option>";
-    TTS.voices.forEach((v,i)=>{const o=el("option",null,(i===0?"★ ":"")+v.name+" ("+v.lang+")");o.value=v.voiceURI;
-      if(TTS.voice&&v.voiceURI===TTS.voice.voiceURI)o.selected=true;sel.appendChild(o);});
-    const frCount=TTS.voices.filter(v=>/^fr/i.test(v.lang)).length;
-    $("#voiceHint").innerHTML=(frCount?`🇫🇷 ${frCount} voix française(s) · ★ = recommandée.`:"Aucune voix française détectée.")+
-      `<br>📱 <b>iPhone/iPad</b> — pour une voix beaucoup plus naturelle : <b>Réglages › Accessibilité › Contenu énoncé › Voix › Français</b>, télécharge une voix « <b>Améliorée</b> » (ex. Audrey, Aurélie, Thomas), puis reviens ici la choisir.`;
+    const natural=el("option",null,"✨ Automatique — voix la plus naturelle (conseillé)");natural.value="auto:natural";sel.appendChild(natural);
+    const offline=el("option",null,"📴 Automatique — voix française locale uniquement");offline.value="auto:offline";sel.appendChild(offline);
+    if(TTS.voices.length){
+      const group=document.createElement("optgroup");group.label="Choisir manuellement";
+      TTS.voices.forEach(voice=>{
+        const meta=TTS_CORE.voiceMeta(voice),icon=meta.quality==="naturelle"?"✨ ":(voice.localService?"📴 ":"🌐 ");
+        const option=el("option",null,`${icon}${voice.name} (${voice.lang}) · ${voice.localService?"locale":"service distant"}`);
+        option.value="manual:"+voice.voiceURI;
+        group.appendChild(option);
+      });
+      sel.appendChild(group);
+    }
+    if(TTS.mode==="manual"&&TTS.voice)sel.value="manual:"+TTS.voice.voiceURI;
+    else sel.value="auto:"+TTS.mode;
+    this.updateVoiceInfo();
+  },
+  updateVoiceInfo(){
+    const state=$("#voiceState"),hint=$("#voiceHint");if(!state||!hint)return;
+    state.innerHTML="";
+    const meta=TTS_CORE.voiceMeta(TTS.voice);
+    if(!TTS.voice){
+      state.appendChild(el("span","voice-chip remote","Voix française indisponible"));
+      hint.innerHTML=`Aucune voix française ${TTS.mode==="offline"?"locale ":""}compatible n’est disponible dans ce navigateur. Installe une voix française sur l’appareil puis rouvre l’application.`;
+      return;
+    }
+    const quality=el("span","voice-chip",meta.quality==="naturelle"?"✨ Voix naturelle":(meta.quality==="améliorée"?"✓ Voix améliorée":"Voix standard"));
+    const locality=el("span","voice-chip "+(meta.local?"local":"remote"),meta.local?"📴 Locale / hors ligne":"🌐 Service vocal distant");
+    const name=el("span","voice-chip name","🎙 "+TTS.voice.name);name.title=TTS.voice.name;
+    state.appendChild(quality);state.appendChild(locality);state.appendChild(name);
+    let install="";
+    if(IS_IOS)install=`Sur iPhone/iPad : <b>Réglages › Accessibilité › Contenu énoncé › Voix › Français</b>, puis télécharge une qualité améliorée ou premium.`;
+    else if(/Windows/i.test(navigator.userAgent))install=`Sous Windows 11 : <b>Paramètres › Accessibilité › Narrateur › Ajouter une voix naturelle</b>. Edge propose aussi des voix naturelles distantes.`;
+    else if(/Android/i.test(navigator.userAgent))install=`Sous Android : ouvre les réglages de <b>Synthèse vocale</b>, installe les données françaises et choisis la voix de meilleure qualité.`;
+    else install=`Installe une voix française améliorée dans les réglages d’accessibilité ou de synthèse vocale de l’appareil.`;
+    hint.innerHTML=(meta.local
+      ?`Cette voix est fournie localement par l’appareil et reste disponible hors connexion.`
+      :`Cette voix est plus naturelle, mais le navigateur ou le système peut utiliser un service distant pour la synthèse. Choisis le mode local si tu veux une lecture strictement hors ligne.`)+`<br>${install}`;
+  },
+  useNaturalVoice(){
+    TTS.mode="natural";TTS.rate=.94;TTS.naturalPauses=true;TTS.pick("","natural");
+    Store.s.voiceMode="natural";Store.s.rate=.94;Store.s.naturalPauses=true;Store.s.speechVersion=2;Store.saveS();
+    $("#rngRate").value=.94;$("#rateVal").textContent="0.94×";$("#chkNatural").checked=true;
+    this.fillVoices();TTS.test();toast("Réglage naturel activé");
   },
   bindSettings(){
-    const r=$("#rngRate"),rv=$("#rateVal"),auto=$("#chkAuto"),sel=$("#selVoice");
-    r.value=Store.get("rate",1); rv.textContent=(+r.value).toFixed(2).replace(/0$/,"")+"×";
+    const r=$("#rngRate"),rv=$("#rateVal"),auto=$("#chkAuto"),natural=$("#chkNatural"),sel=$("#selVoice");
+    r.value=Store.get("rate",.94); rv.textContent=(+r.value).toFixed(2).replace(/0$/,"")+"×";
     auto.checked=Store.get("autoread",true);
+    natural.checked=Store.get("naturalPauses",true);
     r.oninput=()=>{rv.textContent=(+r.value).toFixed(2).replace(/0$/,"")+"×";TTS.rate=+r.value;Store.set("rate",+r.value);};
     auto.onchange=()=>Store.set("autoread",auto.checked);
-    sel.onchange=()=>{TTS.pick(sel.value);Store.set("voiceURI",sel.value);};
+    natural.onchange=()=>{TTS.naturalPauses=natural.checked;Store.set("naturalPauses",natural.checked);};
+    sel.onchange=()=>{
+      const value=sel.value;
+      if(value==="auto:natural"||value==="auto:offline"){
+        const mode=value.slice(5);TTS.pick("",mode);Store.s.voiceMode=mode;Store.s.voiceURI="";
+      }else{
+        const uri=value.slice(7);TTS.pick(uri,"manual");Store.s.voiceMode="manual";Store.s.voiceURI=uri;
+      }
+      Store.saveS();this.updateVoiceInfo();
+    };
     $("#modalBg").onclick=e=>{if(e.target===$("#modalBg"))this.closeSettings();};
     $("#importFile").onchange=e=>{
       const f=e.target.files[0]; if(!f)return;

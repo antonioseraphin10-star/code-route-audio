@@ -272,15 +272,21 @@
     };
     let scene=bg;
     if(id==="roundabout"){
-      scene=bg+`<circle cx="${W/2}" cy="${H/2}" r="92" fill="${C.road}"/>`+
-        `<circle cx="${W/2}" cy="${H/2}" r="40" fill="${C.grass}"/>`+
-        `<circle cx="${W/2}" cy="${H/2}" r="40" fill="none" stroke="${C.line}" stroke-width="3" stroke-dasharray="8 8"/>`;
-      // fleche sens anti-horaire (rond-point français)
-      scene+=`<g fill="none" stroke="${C.line}" stroke-width="5"><path d="M ${W/2+66},${H/2} A 66,66 0 0 1 ${W/2},${H/2+66}"/></g>`;
-      const [hx,hy]=polar(W/2,H/2,66,-90); // bottom
-      scene+=`<polygon points="${W/2-6},${H/2+62} ${W/2+6},${H/2+62} ${W/2},${H/2+74}" fill="${C.line}"/>`;
-      scene+=veh(W/2-16,H-26,C.blue,"up");
-      scene+=`<text x="${W/2}" y="${H-4}" font-size="12" fill="${C.ink}" text-anchor="middle" font-family="Arial">vous</text>`;
+      const cx=W/2,cy=H/2;
+      scene=bg+roadH+roadV+
+        `<circle cx="${cx}" cy="${cy}" r="70" fill="${C.road}"/>`+
+        `<circle cx="${cx}" cy="${cy}" r="31" fill="${C.grass}" stroke="#8cbf72" stroke-width="4"/>`+
+        `<circle cx="${cx}" cy="${cy}" r="50" fill="none" stroke="${C.line}" stroke-width="2" stroke-dasharray="7 8" opacity=".9"/>`;
+      // Flèches neutres : elles montrent uniquement le sens de circulation.
+      scene+=`<path d="M ${cx+55},${cy+18} A 58,58 0 0 0 ${cx+18},${cy+55}" fill="none" stroke="${C.line}" stroke-width="4" stroke-linecap="round"/>`+
+        `<polygon points="${cx+11},${cy+58} ${cx+25},${cy+51} ${cx+23},${cy+65}" fill="${C.line}"/>`+
+        `<path d="M ${cx-55},${cy-18} A 58,58 0 0 0 ${cx-18},${cy-55}" fill="none" stroke="${C.line}" stroke-width="4" stroke-linecap="round"/>`+
+        `<polygon points="${cx-11},${cy-58} ${cx-25},${cy-51} ${cx-23},${cy-65}" fill="${C.line}"/>`;
+      scene+=veh(cx-15,H-24,C.blue,"up");
+      scene+=veh(cx+53,cy+13,"#ef7d32","up");
+      scene+=veh(cx-50,cy-25,"#64748b","down");
+      scene+=`<rect x="${cx-42}" y="${H-17}" width="54" height="15" rx="7" fill="#fff" opacity=".94"/>`+
+        `<text x="${cx-15}" y="${H-6}" font-size="10" fill="${C.blue}" text-anchor="middle" font-weight="700" font-family="Arial">VOUS</text>`;
       return svg(W,H,scene);
     }
     scene+=roadH+roadV+dashV()+dashH();
@@ -308,6 +314,89 @@
   function innerStop(){const pts=[];for(let i=0;i<8;i++){const a=22.5+i*45;pts.push(polar(60,60,56,a).join(","));}
     return `<polygon points="${pts.join(' ')}" fill="${C.red}"/><text x="60" y="60" font-size="30" font-weight="900" font-family="Arial" text-anchor="middle" dominant-baseline="central" fill="#fff">STOP</text>`;}
   function innerYield(){return `<polygon points="60,104 8,16 112,16" fill="#fff"/><polygon points="60,104 8,16 112,16" fill="none" stroke="${C.red}" stroke-width="12" stroke-linejoin="round"/>`;}
+
+  /* ---------- GUIDES PÉDAGOGIQUES : CARREFOUR À SENS GIRATOIRE ---------- */
+  function roundaboutGuide(mode){
+    const W=640,H=360,cx=320,cy=180,outer=118,inner=60;
+    const marker=`rb-arrow-${mode}`;
+    const car=(x,y,color,rotation=0,label="")=>`<g transform="translate(${x},${y}) rotate(${rotation})">`+
+      `<rect x="-16" y="-27" width="32" height="54" rx="9" fill="${color}" stroke="#fff" stroke-width="2"/>`+
+      `<rect x="-11" y="-19" width="22" height="13" rx="3" fill="#dbeafe"/>`+
+      `<rect x="-11" y="9" width="22" height="11" rx="3" fill="#172033" opacity=".34"/>`+
+      (label?`<text x="0" y="43" text-anchor="middle" font-family="Arial" font-size="13" font-weight="800" fill="#172033">${label}</text>`:"")+`</g>`;
+    const pill=(x,y,w,text,color="#0d3a86")=>`<g transform="translate(${x},${y})"><rect width="${w}" height="30" rx="15" fill="#fff" stroke="${color}" stroke-width="2"/>`+
+      `<text x="${w/2}" y="20" text-anchor="middle" font-family="Arial" font-size="13" font-weight="800" fill="${color}">${text}</text></g>`;
+    let s=`<defs><marker id="${marker}" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" refX="14" refY="8" orient="auto"><path d="M0,0 L16,8 L0,16 Z" fill="#1473e6"/></marker></defs>`+
+      `<rect width="${W}" height="${H}" rx="22" fill="#eef6ea"/>`+
+      `<rect x="${cx-57}" y="0" width="114" height="${H}" fill="${C.road}"/>`+
+      `<rect x="0" y="${cy-57}" width="${W}" height="114" fill="${C.road}"/>`+
+      `<circle cx="${cx}" cy="${cy}" r="${outer}" fill="${C.road}"/>`+
+      `<circle cx="${cx}" cy="${cy}" r="${inner}" fill="#a8d48d" stroke="#82b86a" stroke-width="5"/>`+
+      `<circle cx="${cx}" cy="${cy}" r="89" fill="none" stroke="#f8fafc" stroke-width="3" stroke-dasharray="11 12" opacity=".9"/>`+
+      `<path d="M 423 235 A 117 117 0 0 0 438 180" fill="none" stroke="#fff" stroke-width="4" marker-end="url(#${marker})"/>`+
+      `<path d="M 217 125 A 117 117 0 0 0 202 180" fill="none" stroke="#fff" stroke-width="4" marker-end="url(#${marker})"/>`;
+
+    if(mode==="priority"){
+      // Ligne et triangles de cédez-le-passage à l'entrée sud.
+      for(let x=278;x<=350;x+=24)s+=`<polygon points="${x},309 ${x+14},309 ${x+7},299" fill="#fff"/>`;
+      s+=car(320,337,C.blue,0,"VOUS")+car(405,238,"#ef7d32",-40,"DÉJÀ ENGAGÉ")+
+        `<path d="M320 303 L320 276" stroke="#1473e6" stroke-width="6" stroke-linecap="round" marker-end="url(#${marker})"/>`+
+        `<path d="M382 259 A92 92 0 0 0 411 224" fill="none" stroke="#ef7d32" stroke-width="6" stroke-linecap="round"/>`+
+        pill(28,24,132,"1 · RALENTIR")+pill(28,64,196,"2 · CÉDER À L’ANNEAU",C.red)+
+        pill(448,24,164,"3 · S’ENGAGER")+
+        `<text x="320" y="351" text-anchor="middle" font-family="Arial" font-size="12" fill="#fff">Ligne d’entrée</text>`;
+    }else if(mode==="lanes"){
+      const amber="#f59e0b";
+      s+=`<path d="M337 360 L337 296 C401 288 438 241 438 180 C438 116 397 70 320 62 L320 0" fill="none" stroke="#1473e6" stroke-width="9" stroke-linecap="round" marker-end="url(#${marker})"/>`+
+        `<path d="M302 360 L302 267 C354 263 394 228 394 180 C394 133 357 96 316 91 C268 85 227 122 227 180 L0 180" fill="none" stroke="${amber}" stroke-width="9" stroke-linecap="round"/>`+
+        `<polygon points="15,173 0,180 15,187" fill="${amber}"/>`+
+        car(338,318,C.blue,0)+car(300,282,amber,0)+
+        pill(390,300,220,"SORTIE PROCHE · EXTÉRIEUR")+
+        pill(26,300,244,"GAUCHE · INTÉRIEUR POSSIBLE",amber)+
+        `<rect x="151" y="18" width="338" height="48" rx="12" fill="#fff" opacity=".96"/>`+
+        `<text x="320" y="38" text-anchor="middle" font-family="Arial" font-size="13" font-weight="800" fill="#172033">LE MARQUAGE ET LES PANNEAUX PRIMENT</text>`+
+        `<text x="320" y="56" text-anchor="middle" font-family="Arial" font-size="12" fill="#475569">La voie intérieure est une possibilité, jamais une obligation.</text>`;
+    }else{
+      // Sortie est : passage piéton, cycliste et contrôle avant changement de trajectoire.
+      for(let x=492;x<560;x+=14)s+=`<rect x="${x}" y="${cy-46}" width="8" height="92" fill="#fff" opacity=".92"/>`;
+      s+=`<path d="M320 341 C372 314 410 273 431 231 C449 198 481 181 560 181" fill="none" stroke="#1473e6" stroke-width="9" stroke-linecap="round" marker-end="url(#${marker})"/>`+
+        car(418,246,C.blue,-42)+
+        `<g transform="translate(532,132)" stroke="#172033" stroke-width="4" fill="none"><circle cx="-12" cy="13" r="11"/><circle cx="18" cy="13" r="11"/><path d="M-12 13 L0 -8 L14 -6 L18 13 M0 -8 L8 13 L-12 13"/></g>`+
+        `<g transform="translate(516,225)" fill="#172033"><circle cx="0" cy="-18" r="7"/><path d="M-5 -8 L7 -8 L11 16 L3 16 L0 2 L-4 16 L-12 16 Z"/></g>`+
+        `<g transform="translate(451,218)"><circle r="20" fill="#f59e0b" opacity=".2"/><path d="M-9 0 L0 -8 L9 0 M0 -8 V10" stroke="#f59e0b" stroke-width="4" fill="none" stroke-linecap="round"/></g>`+
+        pill(24,24,188,"1 · CONTRÔLER À DROITE")+
+        pill(24,64,224,"2 · CLIGNOTANT DE SORTIE")+
+        pill(401,24,211,"3 · PIÉTONS ET CYCLISTES",C.red)+
+        `<rect x="31" y="292" width="226" height="43" rx="12" fill="#fff" opacity=".96"/>`+
+        `<text x="144" y="310" text-anchor="middle" font-family="Arial" font-size="12" font-weight="800" fill="#172033">NE JAMAIS COUPER LA VOIE EXTÉRIEURE</text>`+
+        `<text x="144" y="326" text-anchor="middle" font-family="Arial" font-size="11" fill="#475569">Rétroviseur · angle mort · trajectoire</text>`;
+    }
+    return svg(W,H,s);
+  }
+
+  function lesson(id){
+    if(id!=="2.11") return [];
+    return [
+      {
+        kicker:"SCHÉMA 1 · PRIORITÉ",
+        title:"Entrer sans gêner les véhicules déjà engagés",
+        caption:"Ralentissez avant la ligne, observez la circulation dans l’anneau et ne vous engagez que si aucun usager prioritaire n’est contraint de freiner.",
+        svg:roundaboutGuide("priority")
+      },
+      {
+        kicker:"SCHÉMA 2 · PLACEMENT",
+        title:"Choisir une voie sans transformer une pratique en obligation",
+        caption:"Pour une sortie proche, restez en principe à l’extérieur. Pour aller à gauche ou faire demi-tour, la voie intérieure est possible si le marquage le permet ; chaque changement de voie doit rester sans danger.",
+        svg:roundaboutGuide("lanes")
+      },
+      {
+        kicker:"SCHÉMA 3 · SORTIE",
+        title:"Signaler, contrôler, puis protéger les usagers vulnérables",
+        caption:"Annoncez la sortie avec le clignotant droit, contrôlez rétroviseurs et angle mort, puis vérifiez le passage piéton et les cyclistes avant de quitter le giratoire.",
+        svg:roundaboutGuide("exit")
+      }
+    ];
+  }
 
   /* ---------- FEUX DU VÉHICULE (vue avant) ---------- */
   function vehicleLights(id){
@@ -421,6 +510,7 @@
         case "traffic_light": return trafficLight(spec);
         case "marking": return marking(spec.id);
         case "intersection": return intersection(spec);
+        case "roundabout_guide": return roundaboutGuide(spec.mode||"priority");
         case "vehicle_lights": return vehicleLights(spec.id);
         case "distance": return distance();
         case "overtaking": return overtaking(spec);
@@ -469,6 +559,9 @@
     {label:"Ligne d'effet STOP",spec:{type:"marking",id:"stop_line"}},
     {label:"Carrefour priorité droite",spec:{type:"intersection",id:"priority_right"}},
     {label:"Rond-point",spec:{type:"intersection",id:"roundabout"}},
+    {label:"Giratoire · priorité",spec:{type:"roundabout_guide",mode:"priority"}},
+    {label:"Giratoire · placement",spec:{type:"roundabout_guide",mode:"lanes"}},
+    {label:"Giratoire · sortie",spec:{type:"roundabout_guide",mode:"exit"}},
     {label:"STOP carrefour",spec:{type:"intersection",id:"stop"}},
     {label:"Cédez carrefour",spec:{type:"intersection",id:"yield"}},
     {label:"Feux de route",spec:{type:"vehicle_lights",id:"main_beam"}},
@@ -492,5 +585,5 @@
     {label:"Circulation double sens",spec:{type:"danger",picto:"two_way"}}
   ];
 
-  window.CODE_VISUALS = { render, catalog: CATALOG };
+  window.CODE_VISUALS = { render, lesson, catalog: CATALOG };
 })();
