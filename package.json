@@ -1,0 +1,11 @@
+{
+  "name": "code-route-audio",
+  "private": true,
+  "description": "PWA de révision du code de la route avec lecture vocale. Aucune dépendance : seuls les scripts de contrôle utilisent Node.js.",
+  "scripts": {
+    "test": "node tools/validate-content.mjs && node tools/validate-tts.mjs && node tools/validate-app.mjs && node tools/validate-quiz.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

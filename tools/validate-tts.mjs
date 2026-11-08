@@ -35,12 +35,15 @@ assert(sequence.length===2,"Une question et ses choix doivent former deux blocs 
 assert(sequence[0].pauseAfter===320,"Une pause doit séparer la question des réponses");
 assert(sequence[1].text.includes("Réponse A")&&sequence[1].text.includes("Réponse B"),"Les choix doivent être regroupés dans un même bloc");
 
+// Le code de l'application est dans app.js depuis le durcissement CSP (PR #3).
 const index=fs.readFileSync("index.html","utf8");
+const app=fs.readFileSync("app.js","utf8");
 const sw=fs.readFileSync("sw.js","utf8");
 assert(index.includes('<script src="tts.js"></script>'),"tts.js doit être chargé par l'application");
-assert(!index.includes("setInterval(()=>{try{if(speechSynthesis.speaking)"),"L'ancien réveil pause/reprise toutes les neuf secondes doit être supprimé");
-assert(index.includes("_runId"),"La lecture doit être protégée contre les callbacks d'une ancienne session");
-assert(index.includes("voix française locale uniquement"),"Le choix hors ligne doit être visible dans les réglages");
+assert(index.indexOf('src="tts.js"')<index.indexOf('src="app.js"'),"tts.js doit être chargé avant app.js");
+assert(!app.includes("setInterval(()=>{try{if(speechSynthesis.speaking)"),"L'ancien réveil pause/reprise toutes les neuf secondes doit être supprimé");
+assert(app.includes("_runId"),"La lecture doit être protégée contre les callbacks d'une ancienne session");
+assert(app.includes("voix française locale uniquement"),"Le choix hors ligne doit être visible dans les réglages");
 assert(sw.includes('"./tts.js"'),"tts.js doit être inclus dans le cache hors ligne");
 
 if(failures.length){

@@ -1,6 +1,6 @@
 /* Service Worker — Code de la Route Révision Audio
    Stratégie : app-shell en cache (offline), réseau d'abord pour la navigation. */
-const CACHE = "cdlr-v11";
+const CACHE = "cdlr-v12";
 const ASSETS = [
   "./",
   "./index.html",
@@ -28,12 +28,21 @@ function canCache(req, res) {
 }
 
 function cacheIfSafe(req, res) {
-  if (canCache(req, res)) caches.open(CACHE).then(c => c.put(req, res.clone()));
+  // Copie faite tout de suite : plus tard, le corps de la réponse est déjà lu
+  // par la page et clone() échoue (« body already used »).
+  if (canCache(req, res)) {
+    const copy = res.clone();
+    caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+  }
   return res;
 }
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache: "reload" contourne le cache HTTP du navigateur (GitHub Pages : 10 min),
+  // sinon une nouvelle version pourrait s'installer avec l'ancien app.js.
+  e.waitUntil(caches.open(CACHE)
+    .then(c => c.addAll(ASSETS.map(url => new Request(url, { cache: "reload" }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", e => {
@@ -47,11 +56,18 @@ self.addEventListener("fetch", e => {
   const req = e.request;
   if (req.method !== "GET") return;
   if (!sameOrigin(req)) return;
-  // Pages : réseau d'abord (pour récupérer les mises à jour), repli cache hors-ligne
+  // Pages : réseau d'abord (pour récupérer les mises à jour), repli cache hors-ligne.
+  // L'app n'a qu'une page : on la range toujours sous ./index.html, pour que des
+  // adresses avec paramètres (?utm=…) ne remplissent pas le cache.
   if (req.mode === "navigate") {
     e.respondWith(
-      fetch(req).then(res => cacheIfSafe(req, res))
-        .catch(() => caches.match(req).then(r => r || caches.match("./index.html")))
+      fetch(req).then(res => {
+        const isPage = /text\/html/.test(res.headers.get("content-type") || "");
+        return isPage ? cacheIfSafe(new Request("./index.html"), res) : res;
+      })
+        .catch(() => caches.match("./index.html")
+          .then(r => r || caches.match(req, { ignoreSearch: true }))
+          .then(r => r || Response.error()))
     );
     return;
   }
@@ -59,6 +75,6 @@ self.addEventListener("fetch", e => {
   e.respondWith(
     caches.match(req).then(cached => cached || fetch(req).then(res => {
       return cacheIfSafe(req, res);
-    }).catch(() => cached))
+    }).catch(() => Response.error()))
   );
 });
