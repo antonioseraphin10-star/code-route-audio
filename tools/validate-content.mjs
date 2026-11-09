@@ -32,7 +32,16 @@ for (const question of questions) {
 
 for (const [id, spec] of Object.entries(images)) {
   if (!ids.includes(Number(id))) failures.push(`Le visuel ${id} ne correspond à aucune question`);
-  if (!visuals.render(spec)) failures.push(`Le visuel ${id} ne peut pas être rendu`);
+  const out = visuals.render(spec);
+  if (!out) failures.push(`Le visuel ${id} ne peut pas être rendu`);
+  // Refonte 2026 : tous les schémas de questions au même format 16/10.
+  else if (!out.startsWith('<svg viewBox="0 0 320 200"')) failures.push(`Le visuel ${id} (${spec.type}) n'est pas au format 320×200`);
+  // Règle pédagogique : jamais de croix ni de point d'exclamation qui souffle la réponse.
+  // (Les vrais panneaux, comme « Autres dangers » et son « ! », ne sont pas concernés.)
+  if (!["sign", "danger", "obligation", "speed_sign", "end_speed"].includes(spec.type)) {
+    if (/>\s*[✕✗!]\s*</.test(out)) failures.push(`Le visuel ${id} contient un signe qui peut souffler la réponse`);
+    if (spec.type === "overtaking" && /fill="#e0a400"/.test(out)) failures.push(`Le visuel ${id} montre la trajectoire du dépassement (elle souffle la réponse)`);
+  }
 }
 if (images[275]) failures.push("La question 275 conserve un visuel de giratoire hors sujet");
 const roundaboutGuides = visuals.lesson("2.11");
