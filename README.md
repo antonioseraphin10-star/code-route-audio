@@ -70,7 +70,7 @@ npm test
 
 Ils vérifient le contenu, la voix, la liste des fichiers hors ligne et le moteur de quiz. GitHub les relance à chaque envoi (badge « Validation » en haut).
 
-**Après toute modification d'un fichier de l'application**, augmenter le numéro de `CACHE` dans `sw.js` (`cdlr-v12` → `cdlr-v13`). Sinon, les téléphones qui ont installé l'app gardent l'ancienne version.
+**Après toute modification d'un fichier de l'application**, augmenter le numéro de `CACHE` dans `sw.js` (`cdlr-v13` → `cdlr-v14`). Sinon, les téléphones qui ont installé l'app gardent l'ancienne version.
 
 ---
 Support pédagogique indépendant de révision. Vérifier les règles à jour sur les sources officielles avant publication ou usage professionnel.

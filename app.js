@@ -6,8 +6,17 @@ if(window.top!==window.self){try{window.top.location=window.self.location;}catch
 const $ = (s,r=document)=>r.querySelector(s);
 const el = (t,c,h)=>{const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.textContent=h; return e;};
 const esc = s => (s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
-const THEME_COLORS=["#2563eb","#0891b2","#7c3aed","#db2777","#16a34a","#ea580c","#0d9488","#dc2626","#9333ea","#475569"];
-const THEME_ICONS=["🧑‍✈️","🚸","🛣️","🚲","🌿","🅿️","🔧","⛑️","🛡️","📋"];
+/* Icône du sprite SVG d'index.html (même trait partout, hors ligne). */
+const ic=(id,cls)=>`<svg class="i${cls?" "+cls:""}" aria-hidden="true"><use href="#${id}"/></svg>`;
+const themeIcon=i=>ic("t"+(i+1));
+/* Titres de thèmes du corpus en « Title Case » → casse de phrase française. */
+const sentenceCase=s=>String(s||"").split(" ").map((w,i)=>i===0?w:w.charAt(0).toLowerCase()+w.slice(1))
+  .join(" ").replace(/([’'])(\p{Lu})/u,(m,a,b)=>a+b.toLowerCase());
+/* Typographie française à l'affichage : 'texte' → « texte », espaces insécables avant ? ! : ; »
+   (le texte lu à voix haute n'est pas modifié). */
+const typo=s=>esc(s)
+  .replace(/(^|[\s(])&#39;([^&]{2,80}?)&#39;(?=[\s.,;:!?)]|$)/g,"$1« $2 »")
+  .replace(/ ([?!:;»])/g," $1").replace(/« /g,"« ");
 const shuffle = a => {let x=a.slice();for(let i=x.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]];}return x;};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 /* Les bonnes réponses du corpus sont à 66 % en A : on mélange l'ordre des choix
@@ -206,7 +215,7 @@ const TTS = {
     this._runId++;
     this.speaking=false;
     if(this._pauseTimer){clearTimeout(this._pauseTimer);this._pauseTimer=null;}
-    if(this.supported){try{speechSynthesis.cancel();}catch(e){}}
+    if(this.supported){try{if(speechSynthesis.paused)speechSynthesis.resume();speechSynthesis.cancel();}catch(e){}}
   },
   speakChunks(chunks,opts){
     opts=opts||{};
@@ -289,6 +298,7 @@ const TTS = {
 };
 
 /* ============================ App ============================ */
+const EXAM_RATIO=35/40; // seuil de l'examen officiel : 35 bonnes réponses sur 40
 const App = {
   view:"home", ctx:{}, quiz:null,
   start(){
@@ -301,57 +311,62 @@ const App = {
     ctx=ctx||{};
     TTS.cancel();
     this.view=view; this.ctx=ctx;
+    document.body.setAttribute("data-view",view);
     window.scrollTo(0,0);
     ({home:this.renderHome,theme:this.renderTheme,course:this.renderCourse,quiz:this.renderQuiz,results:this.renderResults,stats:this.renderStats,ecfList:this.renderEcfList,ecfCard:this.renderEcfCard}[view]).call(this,ctx);
   },
+  /* Zone sombre du haut (sous la barre du logo) ; lane = bande de marquage au sol. */
+  setTop(html,lane){
+    $("#topSlot").innerHTML=html||"";
+    const l=$("#lane"); if(l)l.hidden=!lane;
+    const top=$("#top"); if(top&&top.classList)top.classList[lane?"add":"remove"]("has-lane");
+  },
   subKey(tnum,sid){return "t"+tnum+"_"+sid;},
+  themeProgress(t){
+    let sum=0;
+    t.subthemes.forEach(s=>{const b=Store.bestSub(App.subKey(t.num,s.id));if(b!=null)sum+=b;});
+    return t.subthemes.length?Math.round(sum/t.subthemes.length*100):0;
+  },
+  crumb(parts){
+    return `<nav class="crumb" aria-label="Fil d'Ariane">${parts.map(p=>p.go?`<button onclick="${p.go}">${esc(p.label)}</button>`:`<span>${esc(p.label)}</span>`).join("<span aria-hidden=\"true\">›</span>")}</nav>`;
+  },
 
-  /* ---------- HOME ---------- */
+  /* ---------- ACCUEIL ---------- */
   renderHome(){
     const app=$("#app");
     const totalSub=DATA.themes.reduce((a,t)=>a+t.subthemes.length,0);
     const st=Store.st, acc=st.totalAnswered?Math.round(st.totalCorrect/st.totalAnswered*100):null;
-    let cards="";
-    DATA.themes.forEach((t,i)=>{
-      const nq=t.subthemes.reduce((a,s)=>a+s.questions.length,0);
-      let sum=0;
-      t.subthemes.forEach(s=>{const b=Store.bestSub(App.subKey(t.num,s.id));if(b!=null)sum+=b;});
-      const prog=t.subthemes.length?Math.round(sum/t.subthemes.length*100):0;
-      cards+=`<div class="theme-card" onclick="App.go('theme',{ti:${i}})">
-        <div class="tnum" style="background:${THEME_COLORS[i]}">${THEME_ICONS[i]}</div>
-        <div style="flex:1;min-width:0">
-          <h3>${esc(t.title)}</h3>
-          <div class="sub">${t.subthemes.length} sous-thème${t.subthemes.length>1?"s":""} · ${nq} questions</div>
-          <div class="prog"><i style="width:${prog}%"></i></div>
-        </div>
-      </div>`;
-    });
-    app.innerHTML=`
+    this.setTop(`
       <div class="hero">
-        <h1>🚗 Réviser le Code de la Route</h1>
-        <p>Édition 2026 · Permis B · les questions sont lues à voix haute</p>
-        <div class="stats-row">
-          <span class="pill"><b>${DATA.totalQuestions}</b> questions</span>
-          <span class="pill"><b>${DATA.themes.length}</b> thématiques</span>
-          ${acc!=null?`<span class="pill click" onclick="App.go('stats')">🎯 <b>${acc}%</b> de réussite</span>`:`<span class="pill"><b>${totalSub}</b> leçons</span>`}
+        <h1>Réviser le code de la route</h1>
+        <p>Permis B · édition 2026 · questions lues à voix haute</p>
+        <div class="facts">
+          <div><b>${DATA.totalQuestions}</b>questions</div>
+          <div><b>${totalSub}</b>leçons</div>
+          ${acc!=null?`<button class="click" onclick="App.go('stats')"><b>${acc}&nbsp;%</b>de réussite</button>`:`<div><b>${DATA.themes.length}</b>thèmes</div>`}
         </div>
-      </div>
-      <div class="panel ecf-banner" onclick="App.go('ecfList')">
-        <div class="ecf-ic">🧑‍⚖️</div>
-        <div style="min-width:0"><b>Les 100 questions de l'examinateur</b><span>Vérifications, sécurité &amp; premiers secours — l'oral du jour J</span></div>
-        <div class="ecf-go">→</div>
-      </div>
-      <div class="sec-title">📚 Choisis une thématique</div>
-      <div class="grid">${cards}</div>
-      <div class="panel" style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-green" style="flex:2;min-width:220px" onclick="App.startQuiz(App.allQuestions(),{title:'Quiz surprise — tout le code',key:null,themeNum:null})">
-          🎲 Quiz surprise — 40 questions
-        </button>
-        <button class="btn btn-ghost" style="flex:1;min-width:150px" onclick="App.go('stats')">📊 Ma progression</button>
-      </div>`;
-    if(!TTS.supported){
-      app.insertAdjacentHTML("afterbegin",`<div class="panel" style="background:var(--amber-bg);color:#92400e">⚠️ La synthèse vocale n'est pas disponible dans ce navigateur. L'app fonctionne, mais sans lecture audio. Essaie Chrome, Edge ou Safari.</div>`);
-    }
+        <div class="cta">
+          <button class="btn btn-main" onclick="App.startQuiz(App.allQuestions(),{title:'Quiz de 40 questions',key:null,themeNum:null})">${ic("i-shuffle")}Quiz de 40 questions</button>
+          <button class="btn btn-dark" aria-label="Ma progression" title="Ma progression" onclick="App.go('stats')">${ic("i-stats")}</button>
+        </div>
+      </div>`,true);
+    const rows=DATA.themes.map((t,i)=>{
+      const nq=t.subthemes.reduce((a,s)=>a+s.questions.length,0), prog=this.themeProgress(t), ns=t.subthemes.length;
+      return `<button class="trow" onclick="App.go('theme',{ti:${i}})">
+        <span class="tic">${themeIcon(i)}</span>
+        <span class="tm"><b>${esc(sentenceCase(t.title))}</b><span>${ns} leçon${ns>1?"s":""} · ${nq} questions</span></span>
+        <span class="tp">${prog}&nbsp;%<i><s style="width:${prog}%"></s></i></span>
+      </button>`;
+    }).join("");
+    app.innerHTML=`
+      ${TTS.supported?"":`<div class="alert">La synthèse vocale n'est pas disponible dans ce navigateur. L'application fonctionne, mais sans lecture audio. Essaie Chrome, Edge ou Safari.</div>`}
+      <button class="card exam" onclick="App.go('ecfList')">
+        <span class="pic">${ic("t-exam")}</span>
+        <span class="txt"><b>Les 100 questions de l'examinateur</b><small>Vérifications, sécurité et premiers secours&nbsp;: l'oral du jour&nbsp;J</small></span>
+        <span class="go">${ic("i-arrow")}</span>
+      </button>
+      <div class="sect"><h2>Thèmes</h2><span>${DATA.themes.length} thèmes · ${totalSub} leçons</span></div>
+      <div class="card themes two">${rows}</div>`;
   },
   allQuestions(){
     let all=[];
@@ -361,129 +376,146 @@ const App = {
     return shuffle(all).slice(0,40);
   },
 
-  /* ---------- THEME ---------- */
+  /* ---------- THÈME ---------- */
   renderTheme(c){
     const ti=c.ti, t=DATA.themes[ti], app=$("#app");
     const nq=t.subthemes.reduce((a,s)=>a+s.questions.length,0);
-    let rows="";
-    t.subthemes.forEach((s,si)=>{
-      const b=Store.bestSub(App.subKey(t.num,s.id));
-      const badge=b!=null?`<span style="color:${b>=.8?'var(--green)':'var(--amber)'};font-weight:700"> · ★ ${Math.round(b*100)}%</span>`:"";
-      rows+=`<div class="subrow">
+    this.setTop(`
+      ${this.crumb([{label:"Accueil",go:"App.go('home')"},{label:sentenceCase(t.title)}])}
+      <h1 class="ptitle"><small>THÈME ${t.num}</small>${esc(sentenceCase(t.title))}</h1>
+      <div class="row-btns">
+        <button class="btn btn-main" onclick="App.startThemeQuiz(${ti})">${ic("i-target")}Tout le thème · ${nq} questions</button>
+        <button class="btn btn-dark" onclick="App.startThemeQuiz(${ti},true)">${ic("i-shuffle")}Ordre aléatoire</button>
+      </div>`);
+    const rows=t.subthemes.map((s,si)=>{
+      const b=Store.bestSub(App.subKey(t.num,s.id)), n=s.questions.length;
+      const badge=b!=null?` · <span class="best ${b>=EXAM_RATIO?"good":"mid"}">meilleur score ${Math.round(b*100)}&nbsp;%</span>`:"";
+      return `<div class="subrow">
         <div class="sid">${esc(s.id)}</div>
-        <div class="meta"><b>${esc(s.title)}</b><span>${s.questions.length} question${s.questions.length>1?"s":""}${badge}</span></div>
+        <div class="meta"><b>${esc(s.title)}</b><span>${n?`${n} question${n>1?"s":""}`:"cours seul"}${badge}</span></div>
         <div class="acts">
-          <button class="btn btn-ghost mini" onclick="App.go('course',{ti:${ti},si:${si}})">📖 Cours</button>
-          <button class="btn btn-primary mini" onclick="App.startSubQuiz(${ti},${si})">🎯 Quiz</button>
+          <button class="btn btn-ghost mini" onclick="App.go('course',{ti:${ti},si:${si}})">${ic("i-book","sm")}Cours</button>
+          <button class="btn btn-primary mini" ${n?"":"disabled"} onclick="App.startSubQuiz(${ti},${si})">${ic("i-target","sm")}Quiz</button>
         </div>
       </div>`;
-    });
-    app.innerHTML=`
-      <div class="crumb"><a onclick="App.go('home')">Accueil</a> › <span>${esc(t.title)}</span></div>
-      <div class="sec-title"><span style="font-size:24px">${THEME_ICONS[ti]}</span> ${esc(t.title)}</div>
-      <div class="panel" style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-green" style="flex:1;min-width:200px" onclick="App.startThemeQuiz(${ti})">🎯 Réviser tout le thème (${nq} questions)</button>
-        <button class="btn btn-ghost" style="flex:1;min-width:160px" onclick="App.startThemeQuiz(${ti},true)">🔀 En mode aléatoire</button>
-      </div>
-      <div class="panel">${rows}</div>`;
+    }).join("");
+    app.innerHTML=`<div class="card" style="padding:4px 0">${rows}</div>`;
   },
   startSubQuiz(ti,si){
     const t=DATA.themes[ti], s=t.subthemes[si];
     const list=s.questions.map(q=>({q,tnum:t.num,ttitle:t.title,sid:s.id,stitle:s.title}));
-    this.startQuiz(list,{title:t.title+" · "+s.id+" "+s.title,key:App.subKey(t.num,s.id),themeNum:t.num,back:{view:'theme',ctx:{ti}}});
+    this.startQuiz(list,{title:sentenceCase(t.title)+" · "+s.id+" "+s.title,key:App.subKey(t.num,s.id),themeNum:t.num,back:{view:'theme',ctx:{ti}}});
   },
   startThemeQuiz(ti,rand){
     const t=DATA.themes[ti]; let list=[];
     t.subthemes.forEach(s=>s.questions.forEach(q=>list.push({q,tnum:t.num,ttitle:t.title,sid:s.id,stitle:s.title})));
     if(rand)list=shuffle(list);
-    this.startQuiz(list,{title:t.title+" — tout le thème",key:null,themeNum:t.num,back:{view:'theme',ctx:{ti}}});
+    this.startQuiz(list,{title:sentenceCase(t.title)+" · tout le thème",key:null,themeNum:t.num,back:{view:'theme',ctx:{ti}}});
   },
 
-  /* ---------- COURSE ---------- */
+  /* ---------- LEÇON ---------- */
+  courseHtml(blocks){
+    // Un intertitre « À retenir », « essentiel », « mémo »… ouvre un encadré jusqu'au prochain intertitre.
+    const KEY=/^(à retenir|ce qu.il faut (absolument )?retenir|retenez|m[ée]mo|rappel\b|points? cl[ée]s?|l.essentiel|r[èe]gles? essentielles?\s*:|la r[èe]gle essentielle)/i;
+    let html="", i=0, open=false;
+    const close=()=>{if(open){html+="</div>";open=false;}};
+    while(i<blocks.length){
+      const b=blocks[i];
+      if(b.t==="h"){close();const nxt=blocks[i+1];if(KEY.test(b.s.trim())&&nxt&&nxt.t!=="h"){html+=`<div class="retenir">`;open=true;}html+=`<h3>${typo(b.s)}</h3>`;i++;}
+      else if(b.t==="li"){html+="<ul>";while(i<blocks.length&&blocks[i].t==="li"){html+=`<li>${typo(blocks[i].s)}</li>`;i++;}html+="</ul>";}
+      else{html+=`<p>${typo(b.s)}</p>`;i++;}
+    }
+    close();
+    return html;
+  },
   renderCourse(c){
     const ti=c.ti, si=c.si, t=DATA.themes[ti], s=t.subthemes[si], app=$("#app");
-    let html="", i=0, b=s.course;
-    while(i<b.length){
-      if(b[i].t==="li"){html+="<ul>";while(i<b.length&&b[i].t==="li"){html+=`<li>${esc(b[i].s)}</li>`;i++;}html+="</ul>";}
-      else if(b[i].t==="h"){html+=`<h3>${esc(b[i].s)}</h3>`;i++;}
-      else{html+=`<p>${esc(b[i].s)}</p>`;i++;}
-    }
     const guides=(window.CODE_VISUALS&&typeof CODE_VISUALS.lesson==="function")?CODE_VISUALS.lesson(s.id):[];
-    const guideHtml=guides.map(guide=>`<article class="lesson-diagram">
-      <div class="lesson-diagram-head">
-        <span class="lesson-diagram-kicker">${esc(guide.kicker)}</span>
-        <h3>${esc(guide.title)}</h3>
-        <p>${esc(guide.caption)}</p>
-      </div>
-      <div class="lesson-diagram-visual">${guide.svg}</div>
-    </article>`).join("");
-    app.innerHTML=`
-      <div class="crumb"><a onclick="App.go('home')">Accueil</a> › <a onclick="App.go('theme',{ti:${ti}})">${esc(t.title)}</a> › <span>Cours ${esc(s.id)}</span></div>
-      <div class="sec-title" style="font-size:18px">📖 ${esc(s.id)} — ${esc(s.title)}</div>
+    this.setTop(`
+      ${this.crumb([{label:"Accueil",go:"App.go('home')"},{label:sentenceCase(t.title),go:`App.go('theme',{ti:${ti}})`},{label:"Leçon "+s.id}])}
+      <h1 class="ptitle"><small>LEÇON ${esc(s.id)}</small>${esc(s.title)}</h1>`);
+    const readerHtml=`
       <div class="reader">
-        <button class="rbtn" id="rPlay" title="Lire / Pause">▶️</button>
-        <button class="rbtn" id="rStop" title="Arrêter" style="background:#334155;color:#fff">⏹️</button>
-        <div class="rinfo" id="rInfo">Écouter la leçon</div>
-        <div class="rbar"><i id="rBar"></i></div>
-      </div>
+        <button class="rbtn" id="rPlay" aria-label="Écouter la leçon">${ic("i-play")}</button>
+        <div class="rinfo"><b id="rInfo">Écouter la leçon</b><span id="rSub">${guides.length?`${guides.length} schéma${guides.length>1?"s":""} · `:""}lecture à voix haute</span><div class="rbar"><i id="rBar"></i></div></div>
+        <button class="rbtn stop" id="rStop" aria-label="Arrêter la lecture">${ic("i-stop","sm")}</button>
+      </div>`;
+    const guideHtml=guides.map((guide,gi)=>`<article class="card lesson-diagram">
+        <span class="lesson-diagram-kicker">${esc(guide.kicker)}</span>
+        <h3>${typo(guide.title)}</h3>
+        <p>${typo(guide.caption)}</p>
+        <div class="lesson-diagram-visual">${guide.svg}</div>
+      </article>`).join("");
+    const nq=s.questions.length;
+    app.innerHTML=`${readerHtml}
       ${guideHtml?`<div class="lesson-visuals">${guideHtml}</div>`:""}
-      <div class="panel course">${html||"<p>Pas de contenu de cours pour cette leçon.</p>"}</div>
-      <button class="btn btn-primary btn-lg" onclick="App.startSubQuiz(${ti},${si})">🎯 Passer au quiz de cette leçon</button>`;
+      <div class="card course">${this.courseHtml(s.course)||"<p>Pas de contenu de cours pour cette leçon.</p>"}</div>
+      ${nq?`<button class="btn btn-primary btn-lg" style="margin-top:14px" onclick="App.startSubQuiz(${ti},${si})">${ic("i-target")}Passer au quiz de cette leçon · ${nq} question${nq>1?"s":""}</button>`:""}`;
     const chunks=[];
     guides.forEach(guide=>splitSentences(`${guide.title}. ${guide.caption}`).forEach(p=>chunks.push(p)));
     s.course.forEach(blk=>splitSentences(blk.s).forEach(p=>chunks.push(p)));
     let playing=false;
     const info=$("#rInfo"),bar=$("#rBar"),play=$("#rPlay");
+    const setPlay=on=>{play.innerHTML=ic(on?"i-pause":"i-play");play.setAttribute("aria-label",on?"Mettre en pause":"Écouter la leçon");};
     const startRead=()=>{
-      playing=true;play.textContent="⏸️";info.textContent="Lecture en cours…";
+      playing=true;setPlay(true);info.textContent="Lecture en cours…";
       TTS.speakChunks(chunks,{
         onprogress:(d,tot)=>{bar.style.width=Math.round(d/tot*100)+"%";},
-        onend:()=>{playing=false;play.textContent="▶️";info.textContent="Lecture terminée ✓";bar.style.width="100%";}
+        onend:()=>{playing=false;setPlay(false);info.textContent="Lecture terminée";bar.style.width="100%";}
       });
     };
     play.onclick=()=>{
       if(!playing){
-        if(TTS.supported&&speechSynthesis.paused){speechSynthesis.resume();play.textContent="⏸️";playing=true;return;}
+        if(TTS.supported&&speechSynthesis.paused){speechSynthesis.resume();setPlay(true);playing=true;info.textContent="Lecture en cours…";return;}
         startRead();
-      }else{TTS.pauseToggle();playing=false;play.textContent="▶️";info.textContent="En pause";}
+      }else{TTS.pauseToggle();playing=false;setPlay(false);info.textContent="En pause";}
     };
-    $("#rStop").onclick=()=>{TTS.cancel();playing=false;play.textContent="▶️";info.textContent="Écouter la leçon";bar.style.width="0";};
+    $("#rStop").onclick=()=>{TTS.cancel();playing=false;setPlay(false);info.textContent="Écouter la leçon";bar.style.width="0";};
   },
 
   /* ---------- QUIZ ---------- */
   startQuiz(list,meta){
     if(!list||!list.length){toast("Aucune question disponible.");return;}
-    this.quiz={list:list.map(withShuffledChoices),meta,i:0,correct:0,answered:false,missed:[]};
+    this.quiz={list:list.map(withShuffledChoices),meta,i:0,correct:0,answered:false,missed:[],results:[]};
     this.go("quiz");
+  },
+  quizSegments(){
+    const Q=this.quiz, n=Q.list.length;
+    if(n>60)return `<div class="qbar"><i style="width:${Math.round(Q.i/n*100)}%"></i></div>`;
+    let s="";
+    for(let k=0;k<n;k++)s+=`<i class="${Q.results[k]===true?"ok":Q.results[k]===false?"ko":k===Q.i?"now":""}"></i>`;
+    return `<div class="seg" id="seg" aria-hidden="true">${s}</div>`;
   },
   renderQuiz(){
     const Q=this.quiz, app=$("#app");
     const item=Q.list[Q.i], q=item.q, shown=item.shown, letters=Object.keys(shown.choices);
+    this.setTop(`
+      <div class="qnav">
+        <button class="x" onclick="App.quitQuiz()">${ic("i-x","sm")}Quitter</button>
+        <span class="score" id="qScore">${ic("i-check","sm")}${Q.correct}<span class="sr"> bonnes réponses</span></span>
+        <button class="x" aria-label="Réglages de la voix" title="Réglages de la voix" onclick="App.openSettings()">${ic("i-sliders","sm")}</button>
+      </div>
+      <div class="qtitle">${esc(Q.meta.title)}</div>
+      <div class="qcount"><b>Question ${Q.i+1}</b><span>sur ${Q.list.length}</span></div>
+      ${this.quizSegments()}`);
     let ch="";
     letters.forEach(L=>{ch+=`<button class="choice" data-l="${L}" onclick="App.answer('${L}')">
-        <span class="key">${L}</span><span class="ctxt">${esc(shown.choices[L])}</span><span class="mark"></span></button>`;});
-    const pct=Math.round(Q.i/Q.list.length*100);
+        <span class="key">${L}</span><span class="ctxt">${typo(shown.choices[L])}</span><span class="mark"></span></button>`;});
     const vis=(window.CODE_IMAGES&&window.CODE_VISUALS)?window.CODE_IMAGES[q.id]:null;
     const visHtml=vis?`<div class="qvisual">${CODE_VISUALS.render(vis)}</div>`:"";
     app.innerHTML=`
-      <div class="crumb"><a onclick="App.quitQuiz()">✕ Quitter</a> › <span>${esc(Q.meta.title)}</span></div>
-      <div class="qhead">
-        <span class="qcount">Question ${Q.i+1} / ${Q.list.length}</span>
-        <span class="score" id="qScore">✓ ${Q.correct}</span>
-      </div>
-      <div class="qbar"><i style="width:${pct}%"></i></div>
-      <div class="panel">
+      <div class="card qcard">
         <div class="qtags">
-          <span class="tag">${esc(item.sid)} ${esc(item.stitle)}</span>
-          <span class="tag" style="background:#f1f5f9;color:#475569;cursor:pointer" onclick="App.reread()">🔊 Réécouter</span>
+          <span class="tag">${esc(item.sid)} · ${esc(item.stitle)}</span>
+          <button class="listen" onclick="App.reread()">${ic("i-speaker","sm")}Écouter</button>
         </div>
         ${visHtml}
-        <div class="qtext">${esc(q.text)}</div>
+        <p class="qtext">${typo(q.text)}</p>
         <div class="choices">${ch}</div>
-        <div class="feedback" id="fb"></div>
+        <div class="feedback" id="fb" role="status"></div>
         <div class="qfoot">
-          <span class="ftip">Réponds avec <kbd>A</kbd>..<kbd>D</kbd> · <kbd>R</kbd> réécouter · <kbd>Entrée</kbd> suivante</span>
-          <button class="btn btn-primary" id="nextBtn" style="display:none" onclick="App.next()">Suivante →</button>
+          <button class="btn btn-primary" id="nextBtn" style="display:none" onclick="App.next()">Question suivante${ic("i-arrow")}</button>
+          <span class="ftip">Clavier&nbsp;: <kbd>A</kbd> à <kbd>D</kbd> pour répondre · <kbd>R</kbd> réécouter · <kbd>Entrée</kbd> suivante</span>
         </div>
       </div>`;
     Q.answered=false;
@@ -504,19 +536,22 @@ const App = {
     document.querySelectorAll(".choice").forEach(b=>{
       b.setAttribute("disabled","");
       const bl=b.getAttribute("data-l");
-      if(bl===correct){b.classList.add("correct");b.querySelector(".mark").textContent="✓";}
-      if(bl===L&&L!==correct){b.classList.add("wrong");b.querySelector(".mark").textContent="✗";}
+      if(bl===correct){b.classList.add("correct");b.querySelector(".mark").innerHTML=ic("i-check");}
+      else if(bl===L){b.classList.add("wrong");b.querySelector(".mark").innerHTML=ic("i-x");}
+      else b.classList.add("dim");
     });
     const ok=L===correct;
+    Q.results[Q.i]=ok;
     if(ok)Q.correct++; else Q.missed.push(item);
     Store.logAnswer(item,ok);
-    $("#qScore").textContent="✓ "+Q.correct;
+    $("#qScore").innerHTML=ic("i-check","sm")+Q.correct+`<span class="sr"> bonnes réponses</span>`;
+    const seg=$("#seg"); if(seg&&seg.children&&seg.children[Q.i])seg.children[Q.i].className=ok?"ok":"ko";
     const fb=$("#fb");
     fb.className="feedback show "+(ok?"ok":"no");
-    fb.innerHTML=ok?"✅ <b>Bonne réponse !</b>":`❌ <b>Raté.</b> La bonne réponse était <b>${correct}</b> : ${esc(shown.choices[correct])}`;
+    fb.innerHTML=ok?`<b>Bonne réponse.</b>`:`<b>Raté&nbsp;: la bonne réponse est ${correct}.</b>${typo(shown.choices[correct])}`;
     const nb=$("#nextBtn");
     nb.style.display="inline-flex";
-    nb.textContent=(Q.i+1>=Q.list.length)?"Voir le résultat →":"Suivante →";
+    nb.innerHTML=(Q.i+1>=Q.list.length)?`Voir le résultat${ic("i-arrow")}`:`Question suivante${ic("i-arrow")}`;
     nb.focus();
   },
   next(){const Q=this.quiz;if(Q.i+1>=Q.list.length){this.finishQuiz();return;}Q.i++;this.renderQuiz();},
@@ -528,106 +563,102 @@ const App = {
   },
   quitQuiz(){TTS.cancel();if(confirm("Quitter ce quiz ? Ta progression de cette série sera perdue."))this.go("home");},
 
-  /* ---------- RESULTS ---------- */
+  /* ---------- RÉSULTAT ---------- */
   renderResults(){
     const Q=this.quiz, app=$("#app");
     const total=Q.list.length, correct=Q.correct, pct=Math.round(correct/total*100);
-    const col=pct>=88?"var(--green)":(pct>=70?"var(--amber)":"var(--red)");
-    const verdict=pct>=95?"Excellent ! 🏆":pct>=88?"Niveau examen atteint ✅":pct>=70?"Bien, encore un effort 💪":pct>=50?"Continue à réviser 📚":"À retravailler 📚";
-    const C=2*Math.PI*60, off=C*(1-correct/total);
+    const need=Math.ceil(total*EXAM_RATIO-1e-9), missing=Math.max(0,need-correct);
+    const col=missing===0?"var(--ok)":(pct>=60?"var(--warn)":"var(--ko)");
+    const verdict=missing===0?(correct===total?"Sans faute":"Niveau examen atteint"):`Encore ${missing} bonne${missing>1?"s":""} réponse${missing>1?"s":""}`;
+    const C=2*Math.PI*52, off=C*(1-correct/total);
     const nMiss=Q.missed.length;
-    let missHtml="";
-    if(nMiss){
-      missHtml=`<div class="sec-title" style="font-size:17px;color:var(--ink);margin-top:18px">❌ ${nMiss>1?"Tes "+nMiss+" erreurs":"Ton erreur"}</div>`;
-      Q.missed.forEach(item=>{const q=item.q,shown=item.shown;
-        missHtml+=`<div class="mq">
-          <div class="q">${esc(q.text)}</div>
-          <div class="a"><span class="good">✓ ${esc(shown.answer)} : ${esc(shown.choices[shown.answer])}</span></div>
-          <div class="a" style="color:var(--muted)">${esc(item.sid)} — ${esc(item.stitle)}</div>
-        </div>`;});
-    }
+    this.setTop(`
+      <div class="qnav"><button class="x" onclick="App.go('home')">${ic("i-back","sm")}Accueil</button></div>
+      <div class="qtitle">${esc(Q.meta.title)}</div>`);
+    const missHtml=Q.missed.map(item=>{const q=item.q,shown=item.shown;
+      return `<div class="card mq">
+        <div class="q">${typo(q.text)}</div>
+        <div class="a">${ic("i-check","sm")}<span><b>${esc(shown.answer)}</b>&nbsp;· ${typo(shown.choices[shown.answer])}</span></div>
+        <div class="m">Leçon ${esc(item.sid)} · ${esc(item.stitle)}</div>
+      </div>`;}).join("");
     app.innerHTML=`
-      <div class="crumb"><a onclick="App.go('home')">Accueil</a> › <span>Résultat</span></div>
-      <div class="panel">
-        <div class="result-top">
-          <div class="ring">
-            <svg width="150" height="150">
-              <circle cx="75" cy="75" r="60" fill="none" stroke="#e2e8f0" stroke-width="13"/>
-              <circle cx="75" cy="75" r="60" fill="none" stroke="${col}" stroke-width="13" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}"/>
-            </svg>
-            <div class="pct"><b style="color:${col}">${pct}%</b><span>${correct}/${total}</span></div>
-          </div>
-          <div class="verdict" style="color:${col}">${verdict}</div>
-          <div style="color:var(--muted);font-size:13px;margin-top:4px">${esc(Q.meta.title)}</div>
-          <div style="color:var(--muted);font-size:12px;margin-top:6px">🎯 Seuil de l'examen officiel : 35/40 (87,5 %)</div>
+      <div class="card res">
+        <div class="ring">
+          <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" fill="none" stroke="#e3e1db" stroke-width="11"/>
+            <circle cx="60" cy="60" r="52" fill="none" stroke="${col}" stroke-width="11" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}"/></svg>
+          <div class="pct"><b>${correct}/${total}</b><span>${pct}&nbsp;% de réussite</span></div>
         </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px">
-          ${nMiss?`<button class="btn btn-primary" style="flex:1;min-width:180px" onclick="App.retryMissed()">🔁 ${nMiss>1?"Rejouer mes "+nMiss+" erreurs":"Rejouer mon erreur"}</button>`:""}
-          <button class="btn btn-green" style="flex:1;min-width:140px" onclick="App.retryAll()">↻ Refaire la série</button>
-          <button class="btn btn-ghost" style="flex:1;min-width:120px" onclick="App.go('home')">🏠 Accueil</button>
+        <div class="verdict" style="color:${col}">${verdict}</div>
+        <div class="thr">${missing?"pour atteindre ":""}le seuil de l'examen&nbsp;: ${need}/${total}${total===40?"":" (35/40 à l'examen officiel)"}</div>
+        <div class="gauge" aria-hidden="true"><i style="width:${pct}%;background:${col}"></i><em style="left:${EXAM_RATIO*100}%"></em></div>
+        <div class="glabel" aria-hidden="true"><span style="left:0">0</span><span style="left:${EXAM_RATIO*100}%;transform:translateX(-100%);padding-right:6px">seuil ${need}</span><span style="right:0">${total}</span></div>
+        <div class="ra">
+          ${nMiss?`<button class="btn btn-primary" onclick="App.retryMissed()">${ic("i-retry")}${nMiss>1?"Rejouer mes "+nMiss+" erreurs":"Rejouer mon erreur"}</button>`:""}
+          <button class="btn btn-ghost" onclick="App.retryAll()">Refaire la série</button>
         </div>
-        <div class="miss">${missHtml}</div>
-      </div>`;
+      </div>
+      ${nMiss?`<div class="sect"><h2>${nMiss>1?"Tes erreurs":"Ton erreur"}</h2><span>${nMiss}</span></div>${missHtml}`:""}`;
   },
-  retryMissed(){const m=this.quiz.missed.slice();this.startQuiz(shuffle(m),{title:this.quiz.meta.title+" — rattrapage",key:null,themeNum:this.quiz.meta.themeNum,back:this.quiz.meta.back});},
+  retryMissed(){const m=this.quiz.missed.slice();this.startQuiz(shuffle(m),{title:this.quiz.meta.title+" · rattrapage",key:null,themeNum:this.quiz.meta.themeNum,back:this.quiz.meta.back});},
   retryAll(){this.startQuiz(this.quiz.list.slice(),this.quiz.meta);},
 
   /* ---------- ECF : 100 questions de l'examinateur ---------- */
   ecf:{i:0,revealed:false},
   renderEcfList(){
     const app=$("#app"), D=window.ECF_DATA||[];
-    let rows="";
-    D.forEach((f,idx)=>{
+    this.setTop(`
+      ${this.crumb([{label:"Accueil",go:"App.go('home')"},{label:"Examinateur"}])}
+      <h1 class="ptitle"><small>ORAL DU JOUR J</small>Les 100 questions de l'examinateur</h1>
+      <div class="row-btns">
+        <button class="btn btn-main" onclick="App.openEcf(0)">${ic("i-play")}Commencer à la fiche 1</button>
+        <button class="btn btn-dark" onclick="App.openEcf(Math.floor(Math.random()*${D.length||1}))">${ic("i-shuffle")}Au hasard</button>
+      </div>`);
+    const rows=D.map((f,idx)=>{
       const first=(f.pairs[0]&&f.pairs[0].q)||("Fiche "+f.n);
-      rows+=`<div class="subrow" onclick="App.openEcf(${idx})">
+      return `<div class="subrow clickable" role="button" tabindex="0" onclick="App.openEcf(${idx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();App.openEcf(${idx})}">
         <div class="sid">${String(f.n).padStart(2,'0')}</div>
-        <div class="meta"><b>${esc(first)}</b><span>${f.pairs.length} points · vérification · sécurité / secours</span></div>
-        <div class="acts"><button class="btn btn-primary mini">Ouvrir</button></div>
+        <div class="meta"><b>${typo(first)}</b><span>${f.pairs.length} points · vérification, sécurité, secours</span></div>
+        <span style="color:var(--accent)">${ic("i-arrow")}</span>
       </div>`;
-    });
-    app.innerHTML=`
-      <div class="crumb"><a onclick="App.go('home')">Accueil</a> › <span>100 questions de l'examinateur</span></div>
-      <div class="sec-title">🧑‍⚖️ Les 100 questions de l'examinateur</div>
-      <div class="panel" style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-green" style="flex:1;min-width:200px" onclick="App.openEcf(0)">▶️ Commencer (fiche 1)</button>
-        <button class="btn btn-ghost" style="flex:1;min-width:160px" onclick="App.openEcf(Math.floor(Math.random()*${D.length||1}))">🔀 Au hasard</button>
-      </div>
-      <div class="panel" style="padding:6px 16px">${rows||"<p>Données indisponibles.</p>"}</div>`;
+    }).join("");
+    app.innerHTML=`<div class="card" style="padding:4px 0">${rows||'<p style="padding:16px">Données indisponibles.</p>'}</div>`;
   },
   openEcf(i){this.ecf={i:i,revealed:false};this.go("ecfCard");},
   fmtAnswer(a){
     return (a||"").split("\n").map(l=>{l=l.trim();if(!l)return"";
-      return l.indexOf("• ")===0?`<div class="ecf-li">${esc(l.slice(2))}</div>`:`<div>${esc(l)}</div>`;}).join("");
+      return l.indexOf("• ")===0?`<div class="ecf-li">${typo(l.slice(2))}</div>`:`<div>${typo(l)}</div>`;}).join("");
   },
   renderEcfCard(){
     const app=$("#app"), D=window.ECF_DATA||[], i=this.ecf.i, f=D[i];
     if(!f){this.go("ecfList");return;}
+    this.setTop(`
+      ${this.crumb([{label:"Accueil",go:"App.go('home')"},{label:"Examinateur",go:"App.go('ecfList')"},{label:"Fiche "+f.n}])}
+      <div class="qcount"><b>Fiche ${f.n}</b><span>sur ${D.length}</span></div>
+      <div class="qbar"><i style="width:${Math.round((i+1)/D.length*100)}%"></i></div>`);
     let blocks="";
     f.pairs.forEach((p,bi)=>{
       const demo=p.kind==="demo";
-      const label=demo?"👆 À montrer / faire dans le véhicule":"❓ Question";
+      const label=demo?`${ic("i-hand","sm")}À montrer dans le véhicule`:`${ic("i-help","sm")}Question`;
       const disp=this.ecf.revealed?"block":"none";
       let ans="";
       if(p.a) ans=`<div class="ecf-ans" id="ans${bi}" style="display:${disp}">${App.fmtAnswer(p.a)}</div>`;
       else if(demo) ans=`<div class="ecf-ans demo-note" id="ans${bi}" style="display:${disp}">Geste à effectuer dans le véhicule (rien à dire à l'examinateur).</div>`;
       blocks+=`<div class="ecf-block">
         <div class="ecf-label ${demo?"demo":""}">${label}</div>
-        <div class="ecf-q">${esc(p.q)}</div>
-        ${(p.a||demo)?`<button class="btn btn-ghost mini" onclick="App.revealEcf(${bi})">👁️ Voir la réponse</button>`:""}
+        <div class="ecf-q">${typo(p.q)}</div>
+        ${(p.a||demo)?`<button class="btn btn-ghost mini" onclick="App.revealEcf(${bi})">${ic("i-eye","sm")}Voir la réponse</button>`:""}
         ${ans}
       </div>`;
     });
     app.innerHTML=`
-      <div class="crumb"><a onclick="App.go('ecfList')">✕ Liste</a> › <span>Examinateur</span></div>
-      <div class="qhead"><span class="qcount">Fiche ${f.n} / ${D.length}</span>
-        <span class="tag" style="margin-left:auto;cursor:pointer" onclick="App.readEcf()">🔊 Réécouter</span></div>
-      <div class="qbar"><i style="width:${Math.round((i+1)/D.length*100)}%"></i></div>
-      <div class="panel">${blocks}
-        <button class="btn btn-ghost" style="width:100%;margin-top:12px" onclick="App.revealAllEcf()">👁️ Tout révéler</button>
+      <div class="card" style="padding:4px 16px 16px">
+        <div class="qtags" style="margin:12px 0 0"><button class="listen" style="margin-left:0" onclick="App.readEcf()">${ic("i-speaker","sm")}Écouter la fiche</button></div>
+        ${blocks}
+        <button class="btn btn-ghost" style="width:100%;margin-top:8px" onclick="App.revealAllEcf()">${ic("i-eye","sm")}Tout révéler</button>
       </div>
-      <div style="display:flex;gap:10px">
-        <button class="btn btn-ghost" style="flex:1" ${i<=0?"disabled":""} onclick="App.ecfNav(-1)">← Préc.</button>
-        <button class="btn btn-primary" style="flex:1" ${i>=D.length-1?"disabled":""} onclick="App.ecfNav(1)">Suivant →</button>
+      <div class="ecf-nav" style="margin-top:14px">
+        <button class="btn btn-ghost" ${i<=0?"disabled":""} onclick="App.ecfNav(-1)">${ic("i-back","sm")}Précédente</button>
+        <button class="btn btn-primary" ${i>=D.length-1?"disabled":""} onclick="App.ecfNav(1)">Suivante${ic("i-arrow","sm")}</button>
       </div>`;
     if(Store.get("autoread",true)){
       const chunks=[]; f.pairs.forEach(p=>{if(p.q)chunks.push(p.q);}); TTS.speakChunks(chunks);
@@ -638,72 +669,69 @@ const App = {
   readEcf(){TTS.unlock();const f=window.ECF_DATA[this.ecf.i];const c=[];f.pairs.forEach(p=>{if(p.q)c.push(p.q);if(p.a&&this.ecf.revealed)c.push(p.a);});TTS.speakChunks(c);},
   ecfNav(d){const D=window.ECF_DATA||[];let n=this.ecf.i+d;if(n<0)n=0;if(n>=D.length)n=D.length-1;this.ecf={i:n,revealed:false};this.go("ecfCard");},
 
-  /* ---------- STATS DASHBOARD ---------- */
+  /* ---------- PROGRESSION ---------- */
   renderStats(){
     const app=$("#app"), st=Store.st;
+    this.setTop(`
+      ${this.crumb([{label:"Accueil",go:"App.go('home')"},{label:"Ma progression"}])}
+      <h1 class="ptitle">Ma progression</h1>`);
+    const dataCard=`<div class="panel"><div class="card-h">${ic("i-sliders","sm")}Données</div><div class="actions-row">
+        <button class="btn btn-ghost" onclick="App.exportProgress()">${ic("i-download","sm")}Exporter</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('importFile').click()">${ic("i-upload","sm")}Importer</button>
+        <button class="btn btn-ghost danger" onclick="App.resetProgress()">${ic("i-trash","sm")}Réinitialiser</button>
+      </div>
+      <div class="hint">Exporte ta progression pour la transférer entre ton PC et ton iPhone ou iPad : les statistiques sont enregistrées séparément sur chaque appareil.</div></div>`;
     if(!st.totalAnswered){
       app.innerHTML=`
-        <div class="crumb"><a onclick="App.go('home')">Accueil</a> › <span>Ma progression</span></div>
-        <div class="sec-title">📊 Ma progression</div>
         <div class="panel"><div class="empty">
-          <div class="big">📈</div>
+          <div class="big">${ic("i-chart")}</div>
           <b>Pas encore de statistiques</b>
-          <p style="margin-top:6px">Réponds à quelques questions et tes résultats apparaîtront ici : précision, points faibles, progression dans le temps…</p>
-          <button class="btn btn-green" style="margin-top:14px" onclick="App.go('home')">🎯 Commencer à réviser</button>
-        </div></div>`;
+          <p style="margin-top:6px">Réponds à quelques questions : ta précision, tes points faibles et ta progression apparaîtront ici.</p>
+          <button class="btn btn-primary" style="margin-top:14px" onclick="App.go('home')">${ic("i-target","sm")}Commencer à réviser</button>
+        </div></div>${dataCard}`;
       return;
     }
     const acc=Math.round(st.totalCorrect/st.totalAnswered*100);
     const stk=Store.streak();
-    // KPIs
+    const tone=v=>v>=EXAM_RATIO*100?"var(--ok)":v>=60?"var(--warn)":"var(--ko)";
     const kpis=`<div class="kpis">
       <div class="kpi"><b>${st.totalAnswered}</b><span>questions répondues</span></div>
-      <div class="kpi"><b style="color:${acc>=88?'var(--green)':acc>=70?'var(--amber)':'var(--red)'}">${acc}%</b><span>précision globale</span></div>
-      <div class="kpi"><b>${stk.current}🔥</b><span>jours d'affilée</span></div>
+      <div class="kpi"><b style="color:${tone(acc)}">${acc}&nbsp;%</b><span>précision globale</span></div>
+      <div class="kpi"><b>${stk.current}</b><span>jour${stk.current>1?"s":""} d'affilée</span></div>
       <div class="kpi"><b>${st.sessions.length}</b><span>séries terminées</span></div>
     </div>`;
-    // Ring
-    const C=2*Math.PI*54, off=C*(1-st.totalCorrect/st.totalAnswered), rc=acc>=88?"var(--green)":acc>=70?"var(--amber)":"var(--red)";
-    const ring=`<div class="panel"><div class="card-h">🎯 Précision globale</div>
-      <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;justify-content:center">
-        <div class="ring" style="width:135px;height:135px">
-          <svg width="135" height="135"><circle cx="67.5" cy="67.5" r="54" fill="none" stroke="#e2e8f0" stroke-width="12"/>
-          <circle cx="67.5" cy="67.5" r="54" fill="none" stroke="${rc}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}"/></svg>
-          <div class="pct"><b style="color:${rc};font-size:30px">${acc}%</b><span>${st.totalCorrect}/${st.totalAnswered}</span></div>
+    const C=2*Math.PI*52, off=C*(1-st.totalCorrect/st.totalAnswered), rc=tone(acc);
+    const ring=`<div class="panel"><div class="card-h">${ic("i-target","sm")}Précision globale</div>
+      <div class="ringrow">
+        <div class="ring" style="width:140px;height:140px">
+          <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" fill="none" stroke="#e3e1db" stroke-width="11"/>
+          <circle cx="60" cy="60" r="52" fill="none" stroke="${rc}" stroke-width="11" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}"/></svg>
+          <div class="pct"><b style="font-size:30px">${acc}&nbsp;%</b><span>${st.totalCorrect}/${st.totalAnswered}</span></div>
         </div>
-        <div style="font-size:13.5px;color:var(--muted);max-width:240px">
-          ${acc>=88?"Tu es au niveau de l'examen officiel (87,5 %). Continue ainsi ! 🏆":
+        <p>${acc>=88?"Tu es au niveau de l'examen officiel (35/40). Continue ainsi.":
             acc>=70?"Tu progresses bien. Vise 88 % pour atteindre le niveau de l'examen.":
-            "Encore du travail. Concentre-toi sur tes points faibles ci-dessous. 💪"}
-        </div>
+            "Encore du travail : concentre-toi sur tes points faibles ci-dessous."}</p>
       </div></div>`;
-    // Theme accuracy bars
     let tbars="";
     DATA.themes.forEach((t,i)=>{
       const d=st.themes[t.num]; if(!d||!d.a)return;
       const a=Math.round(d.c/d.a*100);
-      const col=a>=80?"var(--green)":a>=60?"var(--amber)":"var(--red)";
-      tbars+=`<div class="tbar" onclick="App.go('theme',{ti:${i}})">
-        <div class="tlabel">${THEME_ICONS[i]} ${esc(t.title)}</div>
-        <div class="track"><i style="width:${a}%;background:${col}"></i></div>
-        <div class="tval">${a}% · ${d.c}/${d.a}</div>
-      </div>`;
+      tbars+=`<button class="tbar" onclick="App.go('theme',{ti:${i}})">
+        <span class="tlabel">${themeIcon(i)}${esc(sentenceCase(t.title))}</span>
+        <span class="track"><i style="width:${a}%;background:${tone(a)}"></i></span>
+        <span class="tval">${a}&nbsp;% · ${d.c}/${d.a}</span>
+      </button>`;
     });
-    const themeCard=tbars?`<div class="panel"><div class="card-h">📚 Précision par thème <span style="font-weight:500;color:var(--muted);font-size:12px">(clique pour réviser)</span></div>${tbars}</div>`:"";
-    // 14-day activity
+    const themeCard=tbars?`<div class="panel"><div class="card-h">${ic("i-book","sm")}Précision par thème <small>touche un thème pour le réviser</small></div>${tbars}</div>`:"";
     const days=[]; for(let i=13;i>=0;i--){const ds=addDays(todayStr(),-i);days.push({ds,a:(st.days[ds]&&st.days[ds].a)||0});}
     const maxA=Math.max(1,...days.map(d=>d.a));
     const WD=["D","L","M","M","J","V","S"];
-    let dcols="";
-    days.forEach(d=>{
+    const dcols=days.map(d=>{
       const h=Math.round(d.a/maxA*100), p=d.ds.split("-"), wd=WD[new Date(p[0],p[1]-1,p[2]).getDay()];
-      dcols+=`<div class="day" title="${d.ds} : ${d.a} question(s)">
-        <div class="col${d.a?"":" zero"}" style="height:${d.a?Math.max(h,4):4}%"></div>
-        <small>${wd}</small></div>`;
-    });
+      return `<div class="day" title="${d.ds} : ${d.a} question(s)"><div class="col${d.a?"":" zero"}" style="height:${d.a?Math.max(h,4):4}%"></div><small>${wd}</small></div>`;
+    }).join("");
     const totalWeek=days.reduce((a,d)=>a+d.a,0);
-    const actCard=`<div class="panel"><div class="card-h">🗓️ Activité — 14 derniers jours <span style="font-weight:500;color:var(--muted);font-size:12px">(${totalWeek} questions)</span></div><div class="days">${dcols}</div></div>`;
-    // Session trend (line)
+    const actCard=`<div class="panel"><div class="card-h">${ic("i-calendar","sm")}Activité des 14 derniers jours <small>${totalWeek} questions</small></div><div class="days">${dcols}</div></div>`;
     let trendCard="";
     const sess=st.sessions.slice(-20);
     if(sess.length>=2){
@@ -711,43 +739,28 @@ const App = {
       const pts=sess.map((s,i)=>{const x=pad+i*(W-2*pad)/(sess.length-1);const y=H-pad-(s.c/s.n)*(H-2*pad);return [x,y];});
       const line=pts.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ");
       const area="M"+pad+","+(H-pad)+" L"+line.replace(/ /g," L")+" L"+(W-pad)+","+(H-pad)+" Z";
-      const dots=pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="#2563eb"/>`).join("");
+      const dots=pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="#1f4f9e"/>`).join("");
       const last=Math.round(sess[sess.length-1].c/sess[sess.length-1].n*100);
-      trendCard=`<div class="panel trend"><div class="card-h">📈 Progression <span style="font-weight:500;color:var(--muted);font-size:12px">(${sess.length} dernières séries · dernière : ${last}%)</span></div>
-        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-          <line x1="${pad}" y1="${(H-pad-(0.875)*(H-2*pad)).toFixed(1)}" x2="${W-pad}" y2="${(H-pad-(0.875)*(H-2*pad)).toFixed(1)}" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4 4"/>
-          <path d="${area}" fill="rgba(37,99,235,.12)"/>
-          <polyline points="${line}" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      const yT=(H-pad-EXAM_RATIO*(H-2*pad)).toFixed(1);
+      trendCard=`<div class="panel trend"><div class="card-h">${ic("i-chart","sm")}Progression <small>${sess.length} dernières séries · dernière&nbsp;: ${last}&nbsp;%</small></div>
+        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+          <line x1="${pad}" y1="${yT}" x2="${W-pad}" y2="${yT}" stroke="#a56a00" stroke-width="1" stroke-dasharray="4 4"/>
+          <path d="${area}" fill="rgba(31,79,158,.10)"/>
+          <polyline points="${line}" fill="none" stroke="#1f4f9e" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
           ${dots}
         </svg>
-        <div style="font-size:11.5px;color:var(--muted);text-align:right">— — — seuil examen 87,5 %</div></div>`;
+        <div style="font-size:12px;color:var(--muted);text-align:right;margin-top:4px">pointillés&nbsp;: seuil de l'examen (35/40)</div></div>`;
     }
-    // Weak points
     const weakArr=[];
     DATA.themes.forEach((t,i)=>{const d=st.themes[t.num];if(d&&d.a>=3){weakArr.push({i,t,acc:d.c/d.a,d});}});
     weakArr.sort((a,b)=>a.acc-b.acc);
     const weak=weakArr.filter(w=>w.acc<0.85).slice(0,3);
-    let weakCard="";
-    if(weak.length){
-      let rows="";
-      weak.forEach(w=>{const a=Math.round(w.acc*100);
-        rows+=`<div class="weak">
-          <div class="wi" style="background:${THEME_COLORS[w.i]}22">${THEME_ICONS[w.i]}</div>
-          <div class="wm"><b>${esc(w.t.title)}</b><span>${a}% de réussite · ${w.d.c}/${w.d.a}</span></div>
+    const weakCard=weak.length?`<div class="panel"><div class="card-h">${ic("i-target","sm")}Tes points faibles</div>${weak.map(w=>`<div class="weak">
+          <div class="wi">${themeIcon(w.i)}</div>
+          <div class="wm"><b>${esc(sentenceCase(w.t.title))}</b><span>${Math.round(w.acc*100)}&nbsp;% de réussite · ${w.d.c}/${w.d.a}</span></div>
           <button class="btn btn-primary mini" onclick="App.startThemeQuiz(${w.i},true)">Réviser</button>
-        </div>`;});
-      weakCard=`<div class="panel"><div class="card-h">🎯 Tes points faibles</div>${rows}</div>`;
-    }
-    const actions=`<div class="panel"><div class="card-h">⚙️ Données</div><div class="actions-row">
-        <button class="btn btn-ghost" onclick="App.exportProgress()">⬇️ Exporter</button>
-        <button class="btn btn-ghost" onclick="document.getElementById('importFile').click()">⬆️ Importer</button>
-        <button class="btn btn-ghost danger" onclick="App.resetProgress()">🗑️ Réinitialiser</button>
-      </div>
-      <div class="hint" style="margin-top:12px">💡 Exporte ta progression pour la transférer entre ton PC et ton iPhone/iPad (les stats sont stockées séparément sur chaque appareil).</div></div>`;
-    app.innerHTML=`
-      <div class="crumb"><a onclick="App.go('home')">Accueil</a> › <span>Ma progression</span></div>
-      <div class="sec-title">📊 Ma progression</div>
-      ${kpis}${ring}${themeCard}${trendCard}${actCard}${weakCard}${actions}`;
+        </div>`).join("")}</div>`:"";
+    app.innerHTML=`${kpis}${ring}${weakCard}${themeCard}${trendCard}${actCard}${dataCard}`;
   },
   exportProgress(){
     try{
@@ -755,7 +768,7 @@ const App = {
       const url=URL.createObjectURL(blob), a=document.createElement("a");
       a.href=url; a.download="ma-progression-code.json"; document.body.appendChild(a); a.click();
       setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},500);
-      toast("Progression exportée ✓");
+      toast("Progression exportée");
     }catch(e){toast("Export impossible");}
   },
   resetProgress(){
@@ -763,18 +776,18 @@ const App = {
     {Store.reset();toast("Progression réinitialisée");this.go("stats");}
   },
 
-  /* ---------- Settings ---------- */
+  /* ---------- Réglages ---------- */
   openSettings(){$("#modalBg").classList.add("show");this.fillVoices();},
   closeSettings(){$("#modalBg").classList.remove("show");},
   fillVoices(){
     const sel=$("#selVoice"); if(!sel)return; sel.innerHTML="";
-    const natural=el("option",null,"✨ Automatique — voix la plus naturelle (conseillé)");natural.value="auto:natural";sel.appendChild(natural);
-    const offline=el("option",null,"📴 Automatique — voix française locale uniquement");offline.value="auto:offline";sel.appendChild(offline);
+    const natural=el("option",null,"Automatique · voix la plus naturelle (conseillé)");natural.value="auto:natural";sel.appendChild(natural);
+    const offline=el("option",null,"Automatique · voix française locale uniquement");offline.value="auto:offline";sel.appendChild(offline);
     if(TTS.voices.length){
       const group=document.createElement("optgroup");group.label="Choisir manuellement";
       TTS.voices.forEach(voice=>{
-        const meta=TTS_CORE.voiceMeta(voice),icon=meta.quality==="naturelle"?"✨ ":(voice.localService?"📴 ":"🌐 ");
-        const option=el("option",null,`${icon}${voice.name} (${voice.lang}) · ${voice.localService?"locale":"service distant"}`);
+        const meta=TTS_CORE.voiceMeta(voice);
+        const option=el("option",null,`${voice.name} (${voice.lang}) · ${meta.quality} · ${voice.localService?"locale":"service distant"}`);
         option.value="manual:"+voice.voiceURI;
         group.appendChild(option);
       });
@@ -793,9 +806,9 @@ const App = {
       hint.innerHTML=`Aucune voix française ${TTS.mode==="offline"?"locale ":""}compatible n’est disponible dans ce navigateur. Installe une voix française sur l’appareil puis rouvre l’application.`;
       return;
     }
-    const quality=el("span","voice-chip",meta.quality==="naturelle"?"✨ Voix naturelle":(meta.quality==="améliorée"?"✓ Voix améliorée":"Voix standard"));
-    const locality=el("span","voice-chip "+(meta.local?"local":"remote"),meta.local?"📴 Locale / hors ligne":"🌐 Service vocal distant");
-    const name=el("span","voice-chip name","🎙 "+TTS.voice.name);name.title=TTS.voice.name;
+    const quality=el("span","voice-chip",meta.quality==="naturelle"?"Voix naturelle":(meta.quality==="améliorée"?"Voix améliorée":"Voix standard"));
+    const locality=el("span","voice-chip "+(meta.local?"local":"remote"),meta.local?"Locale, hors ligne":"Service vocal distant");
+    const name=el("span","voice-chip name",TTS.voice.name);name.title=TTS.voice.name;
     state.appendChild(quality);state.appendChild(locality);state.appendChild(name);
     let install="";
     if(IS_IOS)install=`Sur iPhone/iPad : <b>Réglages › Accessibilité › Contenu énoncé › Voix › Français</b>, puis télécharge une qualité améliorée ou premium.`;
@@ -834,7 +847,7 @@ const App = {
       const f=e.target.files[0]; if(!f)return;
       if(f.size>1024*1024){toast("Fichier trop volumineux");e.target.value="";return;}
       const rd=new FileReader();
-      rd.onload=()=>{try{Store.importData(JSON.parse(rd.result));toast("Progression importée ✓");App.bindSettings&&0;App.go("stats");}catch(err){toast("Fichier invalide");}};
+      rd.onload=()=>{try{Store.importData(JSON.parse(rd.result));toast("Progression importée");App.go("stats");}catch(err){toast("Fichier invalide");}};
       rd.readAsText(f); e.target.value="";
     };
   }
