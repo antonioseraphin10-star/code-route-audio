@@ -10,6 +10,14 @@ const THEME_COLORS=["#2563eb","#0891b2","#7c3aed","#db2777","#16a34a","#ea580c",
 const THEME_ICONS=["🧑‍✈️","🚸","🛣️","🚲","🌿","🅿️","🔧","⛑️","🛡️","📋"];
 const shuffle = a => {let x=a.slice();for(let i=x.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]];}return x;};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+/* Les bonnes réponses du corpus sont à 66 % en A : on mélange l'ordre des choix
+   à chaque série pour qu'on ne puisse pas deviner « A » par réflexe.
+   item.shown = choix tels qu'affichés (lettres A, B, C… dans l'ordre) + bonne lettre affichée. */
+const withShuffledChoices=item=>{
+  const keys=Object.keys(item.q.choices).sort(), order=shuffle(keys), choices={};
+  order.forEach((k,i)=>{choices[keys[i]]=item.q.choices[k];});
+  return {...item,shown:{choices,answer:keys[order.indexOf(item.q.answer)]}};
+};
 const DATA = window.CODE_DATA;
 const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && "ontouchend" in document);
 
@@ -77,16 +85,23 @@ function normalizeStats(raw){
   }).filter(s=>s.n>0):[];
   return st;
 }
+/* localStorage peut être bloqué (navigation privée, cookies refusés) ou plein :
+   l'app doit continuer à marcher, simplement sans mémoriser la progression. */
+const storageGet=k=>{try{return localStorage.getItem(k);}catch(e){return null;}};
+const storageSet=(k,v)=>{
+  try{localStorage.setItem(k,v);return true;}
+  catch(e){if(!storageSet._warned){storageSet._warned=true;setTimeout(()=>toast("Progression non enregistrée : stockage du navigateur indisponible."),0);}return false;}
+};
 const Store = {
-  s:normalizeSettings(safeJson(localStorage.getItem("cdlr_settings"),{})),
+  s:normalizeSettings(safeJson(storageGet("cdlr_settings"),{})),
   st:null,
   init(){
-    this.st=normalizeStats(safeJson(localStorage.getItem("cdlr_stats"),{}));
+    this.st=normalizeStats(safeJson(storageGet("cdlr_stats"),{}));
     this.saveSt();
     this.saveS();
   },
-  saveS(){localStorage.setItem("cdlr_settings",JSON.stringify(this.s));},
-  saveSt(){localStorage.setItem("cdlr_stats",JSON.stringify(this.st));},
+  saveS(){storageSet("cdlr_settings",JSON.stringify(this.s));},
+  saveSt(){storageSet("cdlr_stats",JSON.stringify(this.st));},
   get(k,d){return this.s[k]===undefined?d:this.s[k];},
   set(k,v){this.s[k]=v;this.saveS();},
 
@@ -438,15 +453,15 @@ const App = {
   /* ---------- QUIZ ---------- */
   startQuiz(list,meta){
     if(!list||!list.length){toast("Aucune question disponible.");return;}
-    this.quiz={list,meta,i:0,correct:0,answered:false,missed:[]};
+    this.quiz={list:list.map(withShuffledChoices),meta,i:0,correct:0,answered:false,missed:[]};
     this.go("quiz");
   },
   renderQuiz(){
     const Q=this.quiz, app=$("#app");
-    const item=Q.list[Q.i], q=item.q, letters=Object.keys(q.choices).sort();
+    const item=Q.list[Q.i], q=item.q, shown=item.shown, letters=Object.keys(shown.choices);
     let ch="";
     letters.forEach(L=>{ch+=`<button class="choice" data-l="${L}" onclick="App.answer('${L}')">
-        <span class="key">${L}</span><span class="ctxt">${esc(q.choices[L])}</span><span class="mark"></span></button>`;});
+        <span class="key">${L}</span><span class="ctxt">${esc(shown.choices[L])}</span><span class="mark"></span></button>`;});
     const pct=Math.round(Q.i/Q.list.length*100);
     const vis=(window.CODE_IMAGES&&window.CODE_VISUALS)?window.CODE_IMAGES[q.id]:null;
     const visHtml=vis?`<div class="qvisual">${CODE_VISUALS.render(vis)}</div>`:"";
@@ -472,21 +487,20 @@ const App = {
         </div>
       </div>`;
     Q.answered=false;
-    this.autoRead(q,letters);
+    if(Store.get("autoread",true))this.readItem(item);
   },
-  autoRead(q,letters){
-    if(!Store.get("autoread",true))return;
-    TTS.speakChunks(TTS_CORE.quizSequence(q,letters));
+  readItem(item){
+    const shown=item.shown;
+    TTS.speakChunks(TTS_CORE.quizSequence({text:item.q.text,choices:shown.choices},Object.keys(shown.choices)));
   },
   reread(){
     TTS.unlock();
-    const Q=this.quiz,q=Q.list[Q.i].q,letters=Object.keys(q.choices).sort();
-    TTS.speakChunks(TTS_CORE.quizSequence(q,letters));
+    this.readItem(this.quiz.list[this.quiz.i]);
   },
   answer(L){
     const Q=this.quiz; if(Q.answered)return; Q.answered=true;
     TTS.cancel();
-    const item=Q.list[Q.i], q=item.q, correct=q.answer;
+    const item=Q.list[Q.i], shown=item.shown, correct=shown.answer;
     document.querySelectorAll(".choice").forEach(b=>{
       b.setAttribute("disabled","");
       const bl=b.getAttribute("data-l");
@@ -499,7 +513,7 @@ const App = {
     $("#qScore").textContent="✓ "+Q.correct;
     const fb=$("#fb");
     fb.className="feedback show "+(ok?"ok":"no");
-    fb.innerHTML=ok?"✅ <b>Bonne réponse !</b>":`❌ <b>Raté.</b> La bonne réponse était <b>${correct}</b> : ${esc(q.choices[correct])}`;
+    fb.innerHTML=ok?"✅ <b>Bonne réponse !</b>":`❌ <b>Raté.</b> La bonne réponse était <b>${correct}</b> : ${esc(shown.choices[correct])}`;
     const nb=$("#nextBtn");
     nb.style.display="inline-flex";
     nb.textContent=(Q.i+1>=Q.list.length)?"Voir le résultat →":"Suivante →";
@@ -525,10 +539,10 @@ const App = {
     let missHtml="";
     if(nMiss){
       missHtml=`<div class="sec-title" style="font-size:17px;color:var(--ink);margin-top:18px">❌ ${nMiss>1?"Tes "+nMiss+" erreurs":"Ton erreur"}</div>`;
-      Q.missed.forEach(item=>{const q=item.q;
+      Q.missed.forEach(item=>{const q=item.q,shown=item.shown;
         missHtml+=`<div class="mq">
           <div class="q">${esc(q.text)}</div>
-          <div class="a"><span class="good">✓ ${esc(q.answer)} : ${esc(q.choices[q.answer])}</span></div>
+          <div class="a"><span class="good">✓ ${esc(shown.answer)} : ${esc(shown.choices[shown.answer])}</span></div>
           <div class="a" style="color:var(--muted)">${esc(item.sid)} — ${esc(item.stitle)}</div>
         </div>`;});
     }
@@ -828,13 +842,17 @@ const App = {
 
 /* ============================ Keyboard ============================ */
 document.addEventListener("keydown",e=>{
-  if($("#modalBg").classList.contains("show"))return;
+  if($("#modalBg").classList.contains("show")){
+    if(e.key==="Escape"){App.closeSettings();e.preventDefault();}
+    return;
+  }
+  if(e.ctrlKey||e.metaKey||e.altKey)return; // laisse passer Ctrl+R, Ctrl+C…
   if(App.view==="quiz"){
-    const Q=App.quiz, k=e.key.toUpperCase();
+    const Q=App.quiz, k=e.key.toUpperCase(), shown=Q.list[Q.i].shown;
     if(!Q.answered&&["A","B","C","D","E"].includes(k)){
-      if(Q.list[Q.i].q.choices[k]!==undefined){App.answer(k);e.preventDefault();}
+      if(shown.choices[k]!==undefined){App.answer(k);e.preventDefault();}
     }else if(!Q.answered&&["1","2","3","4","5"].includes(e.key)){
-      const L=Object.keys(Q.list[Q.i].q.choices).sort()[+e.key-1];
+      const L=Object.keys(shown.choices)[+e.key-1];
       if(L){App.answer(L);e.preventDefault();}
     }else if(k==="R"){App.reread();e.preventDefault();}
     else if((e.key==="Enter"||e.key===" "||e.key==="ArrowRight")&&Q.answered){App.next();e.preventDefault();}

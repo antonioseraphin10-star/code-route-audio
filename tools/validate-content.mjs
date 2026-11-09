@@ -66,7 +66,7 @@ const counts = questions.reduce((acc, question) => {
   return acc;
 }, {});
 if ((counts.A || 0) / questions.length > 0.5) {
-  warnings.push(`Répartition des bonnes réponses très déséquilibrée : ${JSON.stringify(counts)}`);
+  warnings.push(`Répartition des bonnes réponses très déséquilibrée dans data.js : ${JSON.stringify(counts)} (sans effet pour l'élève : app.js mélange l'ordre à l'affichage, contrôlé par validate-quiz)`);
 }
 
 if (failures.length) {
